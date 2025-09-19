@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>对阵结果</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --bg-color: #f8f9fa;
+            --font-color: #333;
+            --border-color: #dee2e6;
+            --card-bg: #fff;
+            --success-color: #28a745;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--font-color);
+        }
+        .main-container {
+            display: flex;
+            gap: 2em;
+            max-width: 1200px;
+            margin: 2em auto;
+            padding: 0 2em;
+            align-items: flex-start;
+        }
+        .container {
+            flex: 3;
+        }
+        .stats-panel {
+            flex: 1;
+            position: sticky;
+            top: 2em;
+            background-color: var(--card-bg);
+            padding: 1.5em;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: var(--primary-color); }
+        .top-actions {
+            display: flex;
+            justify-content: center;
+            gap: 1em;
+            margin-bottom: 2em;
+        }
+        .top-actions button, .top-actions a {
+            cursor: pointer; padding: 10px 20px; border: none; border-radius: 5px;
+            font-size: 16px; font-weight: 500; text-decoration: none; color: white;
+            background-color: var(--primary-color);
+        }
+        #save-history-btn { background-color: var(--success-color); }
+        .top-actions a { background-color: var(--secondary-color); }
+        .match-list { display: flex; flex-direction: column; gap: 15px; }
+        .match {
+            background-color: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 15px; display: flex; align-items: center;
+            justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .teams { flex-grow: 1; text-align: center; }
+        .team { font-size: 1.1em; }
+        .vs { font-weight: bold; margin: 0 15px; color: var(--primary-color); }
+        .score-container { display: flex; align-items: center; gap: 10px; }
+        .score-display, .score-input { font-size: 1.1em; font-weight: bold; }
+        .score-input input { width: 40px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; }
+        .score-actions button {
+            padding: 5px 10px; border: 1px solid var(--border-color); background-color: #f0f0f0;
+            border-radius: 4px; cursor: pointer;
+        }
+        .save-score-btn { border-color: var(--success-color); color: var(--success-color); }
+        .error { color: red; text-align: center; font-size: 1.2em; }
+        .stats-panel h2, .stats-panel h3 { text-align: center; margin-top: 0; margin-bottom: 0.5em; }
+        .stats-panel h3 { margin-top: 1em; color: var(--secondary-color); font-size: 1.1em; }
+        .stats-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .stats-panel th, .stats-panel td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color); }
+        .stats-panel th { background-color: #f2f2f2; }
+        .stats-panel td:first-child, .stats-panel td:last-child { text-align: center; }
+    </style>
+    <script>
+        const HISTORY_ID = {{ history_id|tojson }};
+        const PLAYERS = {{ players|tojson }};
+    </script>
+</head>
+<body>
+    {% if error %}
+        <div class="container" style="max-width: 800px;">
+            <h1>错误</h1>
+            <p class="error">{{ error }}</p>
+            <div class="top-actions"><a href="/">返回首页</a></div>
+        </div>
+    {% else %}
+    <div class="main-container">
+        <div class="container">
+            <h1>对阵结果</h1>
+            <div class="top-actions">
+                <button id="shuffle-btn">随机排序对局</button>
+                <button id="save-history-btn">
+                    {{ '更新记录' if history_id else '保存对局记录' }}
+                </button>
+                <a href="/">返回首页</a>
+            </div>
+            <div class="match-list" id="match-list">
+                {% for match in matches %}
+                    <div class="match" id="match-{{ loop.index0 }}" data-players="{{ match.team1[0] }},{{ match.team1[1] }},{{ match.team2[0] }},{{ match.team2[1] }}">
+                        <div class="teams">
+                            <span class="team">{{ match.team1[0] }} & {{ match.team1[1] }}</span>
+                            <span class="vs">VS</span>
+                            <span class="team">{{ match.team2[0] }} & {{ match.team2[1] }}</span>
+                        </div>
+                        <div class="score-container">
+                            <div class="score-display">
+                                <span class="score-text">
+                                    {%- if match.score and match.score.team1 is not none -%}
+                                        {{ match.score.team1 }} : {{ match.score.team2 }}
+                                    {%- else -%}
+                                        -- : --
+                                    {%- endif -%}
+                                </span>
+                            </div>
+                            <div class="score-input" style="display: none;">
+                                <input type="number" class="score-team1" min="0" value="0">
+                                <span>:</span>
+                                <input type="number" class="score-team2" min="0" value="0">
+                            </div>
+                            <div class="score-actions">
+                                <button class="edit-score-btn">输入比分</button>
+                                <button class="save-score-btn" style="display: none;">保存</button>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="stats-panel">
+            <h2>实时统计</h2>
+            <h3>男子排名</h3>
+            <table id="male-rankings">
+                <thead>
+                    <tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <h3>女子排名</h3>
+            <table id="female-rankings">
+                <thead>
+                    <tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (document.body.contains(document.getElementById('match-list'))) {
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            const saveHistoryBtn = document.getElementById('save-history-btn');
+            const matchList = document.getElementById('match-list');
+            const matchIdLocalStoragePrefix = 'match_scores_';
+            
+            let matchScores = {};
+
+            function calculateAndDisplayStats() {
+                const stats = {};
+                if (!PLAYERS || PLAYERS.length === 0) return;
+                PLAYERS.forEach(p => {
+                    stats[p.name] = { wins: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, gender: p.gender };
+                });
+
+                const matchesOnPage = document.querySelectorAll('.match');
+                matchesOnPage.forEach(match => {
+                    const score = matchScores[match.id];
+                    if (!score || score.team1 === undefined) return;
+
+                    const players = match.dataset.players.split(',');
+                    const team1Players = [players[0], players[1]];
+                    const team2Players = [players[2], players[3]];
+                    const score1 = parseInt(score.team1, 10);
+                    const score2 = parseInt(score.team2, 10);
+
+                    if (isNaN(score1) || isNaN(score2)) return;
+
+                    team1Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score1; stats[p].scoreAgainst += score2; } });
+                    team2Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score2; stats[p].scoreAgainst += score1; } });
+
+                    if (score1 > score2) {
+                        team1Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                        team2Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                    } else if (score2 > score1) {
+                        team2Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                        team1Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                    }
+                });
+
+                const maleStats = [], femaleStats = [];
+                for (const playerName in stats) {
+                    const pStat = stats[playerName];
+                    pStat.name = playerName;
+                    pStat.netScore = pStat.scoreFor - pStat.scoreAgainst;
+                    if (pStat.gender === 'M') maleStats.push(pStat);
+                    else femaleStats.push(pStat);
+                }
+
+                const sortFn = (a, b) => b.wins - a.wins || b.netScore - a.netScore;
+                maleStats.sort(sortFn);
+                femaleStats.sort(sortFn);
+
+                const renderTable = (tbody, data) => {
+                    tbody.innerHTML = '';
+                    data.forEach((p, index) => {
+                        tbody.innerHTML += `<tr>
+                            <td>${index + 1}</td>
+                            <td>${p.name}</td>
+                            <td>${p.wins}/${p.losses}</td>
+                            <td>${p.netScore > 0 ? '+' : ''}${p.netScore}</td>
+                        </tr>`;
+                    });
+                };
+                renderTable(document.querySelector('#male-rankings tbody'), maleStats);
+                renderTable(document.querySelector('#female-rankings tbody'), femaleStats);
+            }
+
+            function initializeScores() {
+                document.querySelectorAll('.match').forEach(match => {
+                    const matchId = match.id;
+                    const scoreText = match.querySelector('.score-text').textContent.trim();
+                    if (scoreText && scoreText !== '-- : --') {
+                        const parts = scoreText.split(':');
+                        matchScores[matchId] = { team1: parseInt(parts[0].trim(), 10), team2: parseInt(parts[1].trim(), 10) };
+                    } else if (!HISTORY_ID) {
+                        const savedScore = localStorage.getItem(matchIdLocalStoragePrefix + matchId);
+                        if (savedScore) {
+                            const { team1, team2 } = JSON.parse(savedScore);
+                            matchScores[matchId] = { team1, team2 };
+                            updateScoreDisplay(match, team1, team2);
+                        }
+                    }
+                });
+                calculateAndDisplayStats();
+            }
+
+            function updateScoreDisplay(match, team1, team2) {
+                match.querySelector('.score-text').textContent = `${team1} : ${team2}`;
+                match.querySelector('.edit-score-btn').textContent = '修改比分';
+            }
+
+            matchList.addEventListener('click', (e) => {
+                const target = e.target;
+                const match = target.closest('.match');
+                if (!match) return;
+
+                const scoreDisplay = match.querySelector('.score-display'), scoreInput = match.querySelector('.score-input');
+                const editBtn = match.querySelector('.edit-score-btn'), saveBtn = match.querySelector('.save-score-btn');
+                const matchId = match.id;
+
+                if (target.classList.contains('edit-score-btn')) {
+                    scoreDisplay.style.display = 'none'; scoreInput.style.display = 'flex';
+                    editBtn.style.display = 'none'; saveBtn.style.display = 'inline-block';
+                    const currentScore = matchScores[matchId] || { team1: 0, team2: 0 };
+                    scoreInput.querySelector('.score-team1').value = currentScore.team1;
+                    scoreInput.querySelector('.score-team2').value = currentScore.team2;
+                } else if (target.classList.contains('save-score-btn')) {
+                    const team1Score = parseInt(scoreInput.querySelector('.score-team1').value, 10) || 0;
+                    const team2Score = parseInt(scoreInput.querySelector('.score-team2').value, 10) || 0;
+                    matchScores[matchId] = { team1: team1Score, team2: team2Score };
+                    if (!HISTORY_ID) localStorage.setItem(matchIdLocalStoragePrefix + matchId, JSON.stringify(matchScores[matchId]));
+                    updateScoreDisplay(match, team1Score, team2Score);
+                    scoreDisplay.style.display = 'block'; scoreInput.style.display = 'none';
+                    editBtn.style.display = 'inline-block'; saveBtn.style.display = 'none';
+                    calculateAndDisplayStats();
+                }
+            });
+
+            async function handleSaveHistory() {
+                const matchesData = [];
+                document.querySelectorAll('.match').forEach(match => {
+                    const players = match.dataset.players.split(',');
+                    matchesData.push({
+                        team1: [players[0], players[1]], team2: [players[2], players[3]],
+                        score: matchScores[match.id] || { team1: null, team2: null }
+                    });
+                });
+
+                const url = HISTORY_ID ? `/update_history/${HISTORY_ID}` : '/save_history';
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ matches: matchesData, players: PLAYERS })
+                    });
+                    if (response.ok) {
+                        const result = await response.json();
+                        alert('记录已保存！');
+                        if (!HISTORY_ID && result.history_id) {
+                            Object.keys(localStorage).forEach(key => { if(key.startsWith(matchIdLocalStoragePrefix)) localStorage.removeItem(key); });
+                            window.location.href = `/history/${result.history_id}`;
+                        }
+                    } else alert('保存失败，请稍后再试。');
+                } catch (error) { alert('保存时发生网络错误。'); }
+            }
+
+            saveHistoryBtn.addEventListener('click', handleSaveHistory);
+
+            function shuffleMatches() { /* ... same as before ... */ }
+            shuffleBtn.addEventListener('click', shuffleMatches);
+
+            initializeScores();
+        }
+    });
+    </script>
+</body>
+</html>

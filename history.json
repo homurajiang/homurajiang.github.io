@@ -1,0 +1,438 @@
+[
+    {
+        "id": "f5fe0bab-5f8e-4868-a265-a4ab267b7ddb",
+        "timestamp": "2025-09-19 15:19:41 (已编辑)",
+        "matches": [
+            {
+                "team1": [
+                    "网友小z",
+                    "团子"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 9
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "谭谭"
+                ],
+                "team2": [
+                    "hwc",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 16,
+                    "team2": 21
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "tiya"
+                ],
+                "team2": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 22,
+                    "team2": 20
+                }
+            },
+            {
+                "team1": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "team2": [
+                    "hwc",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 18,
+                    "team2": 21
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "tiya"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 15
+                }
+            },
+            {
+                "team1": [
+                    "网友小z",
+                    "团子"
+                ],
+                "team2": [
+                    "hwc",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 14
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "谭谭"
+                ],
+                "team2": [
+                    "网友小z",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 6
+                }
+            },
+            {
+                "team1": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 6
+                }
+            }
+        ]
+    },
+    {
+        "id": "a4ae5b4f-3afd-406b-9ff8-3162df203d33",
+        "timestamp": "2025-09-19 15:20:38 (已编辑)",
+        "matches": [
+            {
+                "team1": [
+                    "tiya2",
+                    "谭谭"
+                ],
+                "team2": [
+                    "hwc2",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "team2": [
+                    "tiya2",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "hwc2",
+                    "团子"
+                ],
+                "team2": [
+                    "hwc",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "团子"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "team2": [
+                    "tiya2",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 5
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "谭谭"
+                ],
+                "team2": [
+                    "网友小z",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "hwc2",
+                    "tiya"
+                ],
+                "team2": [
+                    "tiya2",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "谭谭"
+                ],
+                "team2": [
+                    "hwc",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "team2": [
+                    "hwc2",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "tiya2",
+                    "tiya"
+                ],
+                "team2": [
+                    "hwc2",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "team2": [
+                    "网友小z",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            },
+            {
+                "team1": [
+                    "tiya2",
+                    "团子"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 0,
+                    "team2": 0
+                }
+            }
+        ]
+    },
+    {
+        "id": "a4aebda7-772c-4320-b7a8-20ce49dc0eb6",
+        "timestamp": "2025-09-19 15:27:14 (已编辑)",
+        "matches": [
+            {
+                "team1": [
+                    "hwc",
+                    "tiya"
+                ],
+                "team2": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 14
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "team2": [
+                    "网友小z",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 22,
+                    "team2": 20
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "团子"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 14,
+                    "team2": 21
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "team2": [
+                    "hwc",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 14
+                }
+            },
+            {
+                "team1": [
+                    "小肥羊",
+                    "团子"
+                ],
+                "team2": [
+                    "网友小z",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 17,
+                    "team2": 21
+                }
+            },
+            {
+                "team1": [
+                    "网友小z",
+                    "团子"
+                ],
+                "team2": [
+                    "小肥羊",
+                    "tiya"
+                ],
+                "score": {
+                    "team1": 21,
+                    "team2": 2
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "团子"
+                ],
+                "team2": [
+                    "网友小z",
+                    "谭谭"
+                ],
+                "score": {
+                    "team1": 19,
+                    "team2": 21
+                }
+            },
+            {
+                "team1": [
+                    "hwc",
+                    "谭谭"
+                ],
+                "team2": [
+                    "网友小z",
+                    "团子"
+                ],
+                "score": {
+                    "team1": 14,
+                    "team2": 21
+                }
+            }
+        ],
+        "players": [
+            {
+                "gender": "M",
+                "name": "小肥羊"
+            },
+            {
+                "gender": "M",
+                "name": "网友小z"
+            },
+            {
+                "gender": "M",
+                "name": "hwc"
+            },
+            {
+                "gender": "F",
+                "name": "团子"
+            },
+            {
+                "gender": "F",
+                "name": "tiya"
+            },
+            {
+                "gender": "F",
+                "name": "谭谭"
+            }
+        ]
+    }
+]
