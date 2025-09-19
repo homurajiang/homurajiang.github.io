@@ -1,308 +1,226 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  
-
-  
-  <title>Hexo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta property="og:type" content="website">
-<meta property="og:title" content="Hexo">
-<meta property="og:url" content="http://yoursite.com/index.html">
-<meta property="og:site_name" content="Hexo">
-<meta property="article:author" content="John Doe">
-<meta name="twitter:card" content="summary">
-  
-    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
-  
-  
-    <link rel="icon" href="/favicon.png">
-  
-  
-    <link href="//fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet" type="text/css">
-  
-  
-<link rel="stylesheet" href="/css/style.css">
-
-<meta name="generator" content="Hexo 4.2.0"></head>
-
+    <meta charset="UTF-8">
+    <title>羽毛球对阵生成工具</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root { --primary-color: #007bff; --secondary-color: #6c757d; --bg-color: #f8f9fa; --font-color: #333; --border-color: #dee2e6; --card-bg: #fff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; background-color: var(--bg-color); color: var(--font-color); }
+        .container { max-width: 700px; margin: 2em auto; padding: 2em; background-color: var(--card-bg); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: var(--primary-color); }
+        h2 { color: var(--secondary-color); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 2em; }
+        .player-row { display: flex; align-items: center; margin-bottom: 10px; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; }
+        .player-row input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; }
+        .gender-group { margin-right: 10px; }
+        .actions { margin-top: 15px; display: flex; gap: 10px; }
+        button, input[type="submit"] { cursor: pointer; padding: 10px 15px; border: none; border-radius: 5px; font-size: 16px; font-weight: 500; }
+        button[type="button"], #add-player, #clear-players { background-color: var(--secondary-color); color: white; }
+        button[type="submit"], .submit-btn { background-color: var(--primary-color); color: white; width: 100%; margin-top: 1em; }
+        button:hover, input[type="submit"]:hover { opacity: 0.9; }
+        .form-group { margin: 20px 0; }
+        select, input[type="radio"] { margin-right: 5px; }
+        label { margin-right: 15px; }
+        .history-section { margin-top: 3em; }
+        #history-list { list-style: none; padding: 0; }
+        #history-list li { background-color: #f0f0f0; margin-bottom: 8px; border-radius: 5px; transition: background-color 0.2s; }
+        #history-list li a { display: block; padding: 12px 15px; text-decoration: none; color: var(--font-color); cursor: pointer; }
+        #history-list li:hover { background-color: #e0e0e0; }
+    </style>
+</head>
 <body>
-  <div id="container">
-    <div id="wrap">
-      <header id="header">
-  <div id="banner"></div>
-  <div id="header-outer" class="outer">
-    <div id="header-title" class="inner">
-      <h1 id="logo-wrap">
-        <a href="/" id="logo">Hexo</a>
-      </h1>
-      
+    <div class="container">
+        <h1>羽毛球对阵生成工具</h1>
+        <form id="main-form">
+            <h2>队员列表</h2>
+            <div id="players-list"></div>
+            <div class="actions">
+                <button type="button" id="add-player">添加队员</button>
+                <button type="button" id="clear-players">清空列表</button>
+            </div>
+            <div class="form-group">
+                <h2>模式选择</h2>
+                <input type="radio" id="random_doubles" name="mode" value="random_doubles" checked>
+                <label for="random_doubles">随机双打</label>
+                <input type="radio" id="mixed" name="mode" value="mixed">
+                <label for="mixed">男女混双</label>
+            </div>
+            <div class="form-group">
+                <h2>每人对局数</h2>
+                <select name="k" id="k-select" required style="padding: 8px; border-radius: 4px;"></select>
+            </div>
+            <button type="submit" class="submit-btn">生成对阵</button>
+        </form>
+        <div class="history-section">
+            <h2>历史记录 (保存在您的浏览器中)</h2>
+            <ul id="history-list"></ul>
+        </div>
     </div>
-    <div id="header-inner" class="inner">
-      <nav id="main-nav">
-        <a id="main-nav-toggle" class="nav-icon"></a>
-        
-          <a class="main-nav-link" href="/">Home</a>
-        
-          <a class="main-nav-link" href="/archives">Archives</a>
-        
-      </nav>
-      <nav id="sub-nav">
-        
-          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
-        
-        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
-      </nav>
-      <div id="search-form-wrap">
-        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://yoursite.com"></form>
-      </div>
-    </div>
-  </div>
-</header>
-      <div class="outer">
-        <section id="main">
-  
-    <article id="post-Hexo intro" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/2020/03/03/Hexo%20intro/" class="article-date">
-  <time datetime="2020-03-03T06:56:16.748Z" itemprop="datePublished">2020-03-03</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2020/03/03/Hexo%20intro/">Hexo intro</a>
-    </h1>
-  
 
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <h1 id="Markdown入门"><a href="#Markdown入门" class="headerlink" title="Markdown入门"></a>Markdown入门</h1><h3 id="Markdown标题"><a href="#Markdown标题" class="headerlink" title="Markdown标题"></a>Markdown标题</h3><h5 id="使用-号标记"><a href="#使用-号标记" class="headerlink" title="使用#号标记"></a>使用#号标记</h5><p>使用 # 号可以表示1-6级标题，一级标题对应一个 # 号，二级标题对应两个 # 号，以此类推</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"># 一级标题</span><br><span class="line">## 二级标题</span><br><span class="line">### 三级标题</span><br><span class="line">#### 四级标题</span><br><span class="line">##### 五级标题</span><br><span class="line">###### 六级标题</span><br></pre></td></tr></table></figure>
+    <script>
+        // 重要：部署后请将此URL替换为您的Vercel后端地址
+        const API_BASE_URL = 'https://bad-match-v2.vercel.app'; // 示例URL，请替换
 
-<h3 id="Markdown段落格式"><a href="#Markdown段落格式" class="headerlink" title="Markdown段落格式"></a>Markdown段落格式</h3><h5 id="字体"><a href="#字体" class="headerlink" title="字体"></a>字体</h5><p>Markdown可以使用以下几种字体</p>
-<pre><code>*斜体文本*
-_斜体文本_
-**粗体文本**
-__粗体文本__
-***粗斜体文本***
-___粗斜体文本___</code></pre><h5 id="分隔线"><a href="#分隔线" class="headerlink" title="分隔线"></a>分隔线</h5><p>你可以在一行中用三个以上的星号、减号、底线来建立一个分隔线，行内不能有其他东西。你也可以在星号或是减号中间插入空格。下面每种写法都可以建立分隔线：</p>
-<pre><code>***
-​
-* * *
-​
-*****
-​
-- - -
-​
-----------
+        const playersList = document.getElementById('players-list');
+        const addPlayerBtn = document.getElementById('add-player');
+        const clearPlayersBtn = document.getElementById('clear-players');
+        const kSelect = document.getElementById('k-select');
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        const mainForm = document.getElementById('main-form');
+        const historyList = document.getElementById('history-list');
+        let playerCount = 0;
 
-* * *</code></pre><h3 id="Markdown列表"><a href="#Markdown列表" class="headerlink" title="Markdown列表"></a>Markdown列表</h3><p>Markdown 支持有序列表和无序列表。<br>无序列表使用星号( *  )、加号( + )或是减号(<strong>-</strong>)作为列表标记：</p>
-<pre><code>* 第一项
-* 第二项
-* 第三项
-​
-+ 第一项
-+ 第二项
-+ 第三项
-​
-​
-- 第一项
-- 第二项
-- 第三项</code></pre>
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://yoursite.com/2020/03/03/Hexo%20intro/" data-id="ck7bjl98g0000mgt3f7n63hdr" class="article-share-link">Share</a>
-      
-      
-    </footer>
-  </div>
-  
-</article>
+        const DB_KEYS = { PLAYERS: 'badminton_players', HISTORY: 'badminton_history' };
 
+        function savePlayers() {
+            localStorage.setItem(DB_KEYS.PLAYERS, JSON.stringify(getPlayersData()));
+        }
 
-  
-    <article id="post-Hello-Hexo" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/2020/03/01/Hello-Hexo/" class="article-date">
-  <time datetime="2020-03-01T06:51:18.000Z" itemprop="datePublished">2020-03-01</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2020/03/01/Hello-Hexo/">Hello Hexo</a>
-    </h1>
-  
+        function loadPlayers() {
+            const saved = localStorage.getItem(DBKEYS.PLAYERS);
+            if (saved) {
+                const players = JSON.parse(saved);
+                if (players && players.length > 0) {
+                    players.forEach(p => addPlayer(p.name, p.gender));
+                    return;
+                }
+            }
+            for (let i = 0; i < 6; i++) addPlayer();
+        }
 
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>Hello Hexo!</p>
+        function createPlayerRow(id, name = '', gender = 'M') {
+            const div = document.createElement('div');
+            div.className = 'player-row';
+            div.id = `player-row-${id}`;
+            div.innerHTML = `
+                <input type="text" placeholder="队员姓名" value="${name}" required>
+                <span class="gender-group">
+                    <input type="radio" id="gender-m-${id}" name="player-gender-${id}" value="M" ${gender === 'M' ? 'checked' : ''}> <label for="gender-m-${id}">男</label>
+                    <input type="radio" id="gender-f-${id}" name="player-gender-${id}" value="F" ${gender === 'F' ? 'checked' : ''}> <label for="gender-f-${id}">女</label>
+                </span>
+                <button type="button" class="remove-player-btn">删除</button>`;
+            return div;
+        }
 
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://yoursite.com/2020/03/01/Hello-Hexo/" data-id="ck7bjkt9y0000qgt31lswhah0" class="article-share-link">Share</a>
-      
-      
-    </footer>
-  </div>
-  
-</article>
+        function addPlayer(name = '', gender = 'M') {
+            const newRow = createPlayerRow(playerCount, name, gender);
+            playersList.appendChild(newRow);
+            playerCount++;
+            updateKOptions();
+        }
 
+        function getPlayersData() {
+            const players = [];
+            playersList.querySelectorAll('.player-row').forEach(row => {
+                const nameInput = row.querySelector('input[type="text"]');
+                const genderInput = row.querySelector('input[type="radio"]:checked');
+                if (nameInput && nameInput.value && genderInput) {
+                    players.push({ name: nameInput.value, gender: genderInput.value });
+                }
+            });
+            return players;
+        }
 
-  
-    <article id="post-hello-world" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/2020/03/01/hello-world/" class="article-date">
-  <time datetime="2020-03-01T06:12:15.871Z" itemprop="datePublished">2020-03-01</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2020/03/01/hello-world/">Hello World</a>
-    </h1>
-  
+        async function updateKOptions() {
+            const players = getPlayersData();
+            if (players.length < 4) {
+                kSelect.innerHTML = '<option>队员不足</option>';
+                return;
+            }
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/get_k_options`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ players, mode })
+                });
+                const options = await response.json();
+                kSelect.innerHTML = '';
+                if (options.length > 0) {
+                    options.forEach(k => kSelect.innerHTML += `<option value="${k}">${k}</option>`);
+                } else {
+                    kSelect.innerHTML = '<option>无可用局数</option>';
+                }
+            } catch (e) {
+                kSelect.innerHTML = '<option>无法连接后端</option>';
+            }
+        }
 
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>Welcome to <a href="https://hexo.io/" target="_blank" rel="noopener">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/" target="_blank" rel="noopener">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html" target="_blank" rel="noopener">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues" target="_blank" rel="noopener">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">"My New Post"</span></span><br></pre></td></tr></table></figure>
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem(DB_KEYS.HISTORY) || '[]');
+            history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            historyList.innerHTML = '';
+            if (history.length === 0) {
+                historyList.innerHTML = '<li>暂无历史记录</li>';
+                return;
+            }
+            history.forEach(item => {
+                const title = `${new Date(item.timestamp).toLocaleString()} - ${item.players.length}人局`;
+                historyList.innerHTML += `<li><a data-history-id="${item.id}">${title}</a></li>`;
+            });
+        }
 
-<p>More info: <a href="https://hexo.io/docs/writing.html" target="_blank" rel="noopener">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+        historyList.addEventListener('click', e => {
+            if (e.target.tagName === 'A') {
+                const historyId = e.target.dataset.historyId;
+                const history = JSON.parse(localStorage.getItem(DB_KEYS.HISTORY) || '[]');
+                const data = history.find(item => item.id === historyId);
+                if (data) {
+                    sessionStorage.setItem('current_match_data', JSON.stringify(data));
+                    window.location.href = 'result.html';
+                }
+            }
+        });
 
-<p>More info: <a href="https://hexo.io/docs/server.html" target="_blank" rel="noopener">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+        mainForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.textContent = '生成中...';
+            submitBtn.disabled = true;
+            const players = getPlayersData();
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const k = parseInt(kSelect.value, 10);
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ players, mode, k })
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || '生成失败');
+                }
+                const data = await response.json();
+                sessionStorage.setItem('current_match_data', JSON.stringify(data));
+                window.location.href = 'result.html';
+            } catch (error) {
+                alert(`错误: ${error.message}`);
+            } finally {
+                submitBtn.textContent = '生成对阵';
+                submitBtn.disabled = false;
+            }
+        });
 
-<p>More info: <a href="https://hexo.io/docs/generating.html" target="_blank" rel="noopener">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
+        playersList.addEventListener('click', e => {
+            if (e.target.classList.contains('remove-player-btn')) {
+                e.target.closest('.player-row').remove();
+                savePlayers();
+                updateKOptions();
+            }
+        });
+        addPlayerBtn.addEventListener('click', () => addPlayer());
+        clearPlayersBtn.addEventListener('click', () => {
+            playersList.innerHTML = '';
+            playerCount = 0;
+            localStorage.removeItem(DB_KEYS.PLAYERS);
+            for (let i = 0; i < 6; i++) addPlayer();
+            savePlayers();
+        });
+        playersList.addEventListener('input', () => { savePlayers(); updateKOptions(); });
+        modeRadios.forEach(radio => radio.addEventListener('change', updateKOptions));
 
-<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html" target="_blank" rel="noopener">Deployment</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://yoursite.com/2020/03/01/hello-world/" data-id="ck7bjkta50001qgt35o7xgm8c" class="article-share-link">Share</a>
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-  
-
-
-</section>
-        
-          <aside id="sidebar">
-  
-    
-
-  
-    
-
-  
-    
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Archives</h3>
-    <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li></ul>
-    </div>
-  </div>
-
-
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Recent Posts</h3>
-    <div class="widget">
-      <ul>
-        
-          <li>
-            <a href="/2020/03/03/Hexo%20intro/">Hexo intro</a>
-          </li>
-        
-          <li>
-            <a href="/2020/03/01/Hello-Hexo/">Hello Hexo</a>
-          </li>
-        
-          <li>
-            <a href="/2020/03/01/hello-world/">Hello World</a>
-          </li>
-        
-      </ul>
-    </div>
-  </div>
-
-  
-</aside>
-        
-      </div>
-      <footer id="footer">
-  
-  <div class="outer">
-    <div id="footer-info" class="inner">
-      &copy; 2020 John Doe<br>
-      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
-    </div>
-  </div>
-</footer>
-    </div>
-    <nav id="mobile-nav">
-  
-    <a href="/" class="mobile-nav-link">Home</a>
-  
-    <a href="/archives" class="mobile-nav-link">Archives</a>
-  
-</nav>
-    
-
-<script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-
-
-  
-<link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
-
-  
-<script src="/fancybox/jquery.fancybox.pack.js"></script>
-
-
-
-
-<script src="/js/script.js"></script>
-
-
-
-
-  </div>
+        loadPlayers();
+        loadHistory();
+    </script>
 </body>
 </html>

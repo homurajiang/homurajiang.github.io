@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>对阵结果</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root { --primary-color: #007bff; --secondary-color: #6c757d; --bg-color: #f8f9fa; --font-color: #333; --border-color: #dee2e6; --card-bg: #fff; --success-color: #28a745; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; background-color: var(--bg-color); color: var(--font-color); }
+        .main-container { display: flex; gap: 2em; max-width: 1200px; margin: 2em auto; padding: 0 2em; align-items: flex-start; }
+        .container { flex: 3; }
+        .stats-panel { flex: 1; position: sticky; top: 2em; background-color: var(--card-bg); padding: 1.5em; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2, h3 { text-align: center; }
+        h1 { color: var(--primary-color); }
+        .top-actions { display: flex; justify-content: center; gap: 1em; margin-bottom: 2em; }
+        .top-actions button, .top-actions a { cursor: pointer; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; font-weight: 500; text-decoration: none; color: white; background-color: var(--primary-color); }
+        #save-history-btn { background-color: var(--success-color); }
+        .top-actions a { background-color: var(--secondary-color); }
+        .match-list { display: flex; flex-direction: column; gap: 15px; }
+        .match { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .teams { flex-grow: 1; text-align: center; }
+        .team { font-size: 1.1em; }
+        .vs { font-weight: bold; margin: 0 15px; color: var(--primary-color); }
+        .score-container { display: flex; align-items: center; gap: 10px; }
+        .score-display, .score-input { font-size: 1.1em; font-weight: bold; }
+        .score-input input { width: 40px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; }
+        .score-actions button { padding: 5px 10px; border: 1px solid var(--border-color); background-color: #f0f0f0; border-radius: 4px; cursor: pointer; }
+        .save-score-btn { border-color: var(--success-color); color: var(--success-color); }
+        .error { color: red; text-align: center; font-size: 1.2em; }
+        .stats-panel h2, .stats-panel h3 { margin-top: 0; margin-bottom: 0.5em; }
+        .stats-panel h3 { margin-top: 1em; color: var(--secondary-color); font-size: 1.1em; }
+        .stats-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .stats-panel th, .stats-panel td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color); }
+        .stats-panel th { background-color: #f2f2f2; }
+        .stats-panel td:first-child, .stats-panel td:last-child { text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const root = document.getElementById('root');
+            const dataString = sessionStorage.getItem('current_match_data');
+
+            if (!dataString) {
+                root.innerHTML = `<div class="container" style="max-width: 800px;">
+                    <h1>错误</h1><p class="error">没有找到对局数据，请返回首页重新生成。</p>
+                    <div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
+                return;
+            }
+
+            const data = JSON.parse(dataString);
+            const { matches, players, id: historyId } = data;
+            const DB_HISTORY_KEY = 'badminton_history';
+
+            function render() {
+                root.innerHTML = `
+                <div class="main-container">
+                    <div class="container">
+                        <h1>对阵结果</h1>
+                        <div class="top-actions">
+                            <button id="shuffle-btn">随机排序对局</button>
+                            <button id="save-history-btn">${historyId ? '更新记录' : '保存对局记录'}</button>
+                            <a href="index.html">返回首页</a>
+                        </div>
+                        <div class="match-list" id="match-list">
+                            ${matches.map((match, index) => `
+                                <div class="match" id="match-${index}" data-players="${match.team1[0]},${match.team1[1]},${match.team2[0]},${match.team2[1]}">
+                                    <div class="teams">
+                                        <span class="team">${match.team1[0]} & ${match.team1[1]}</span>
+                                        <span class="vs">VS</span>
+                                        <span class="team">${match.team2[0]} & ${match.team2[1]}</span>
+                                    </div>
+                                    <div class="score-container">
+                                        <div class="score-display"><span class="score-text">${(match.score && match.score.team1 != null) ? `${match.score.team1} : ${match.score.team2}` : '-- : --'}</span></div>
+                                        <div class="score-input" style="display: none;">
+                                            <input type="number" class="score-team1" min="0" value="0"> : <input type="number" class="score-team2" min="0" value="0">
+                                        </div>
+                                        <div class="score-actions">
+                                            <button class="edit-score-btn">输入比分</button>
+                                            <button class="save-score-btn" style="display: none;">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="stats-panel">
+                        <h2>实时统计</h2>
+                        <h3>男子排名</h3>
+                        <table id="male-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
+                        <h3>女子排名</h3>
+                        <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
+                    </div>
+                </div>`;
+                attachEventListeners();
+                calculateAndDisplayStats();
+            }
+
+            function calculateAndDisplayStats() {
+                const stats = {};
+                players.forEach(p => { stats[p.name] = { wins: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, gender: p.gender }; });
+
+                document.querySelectorAll('.match').forEach((matchEl, index) => {
+                    const matchData = matches[index];
+                    if (!matchData.score || matchData.score.team1 == null) return;
+
+                    const team1Players = matchData.team1;
+                    const team2Players = matchData.team2;
+                    const score1 = parseInt(matchData.score.team1, 10);
+                    const score2 = parseInt(matchData.score.team2, 10);
+
+                    if (isNaN(score1) || isNaN(score2)) return;
+
+                    team1Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score1; stats[p].scoreAgainst += score2; } });
+                    team2Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score2; stats[p].scoreAgainst += score1; } });
+
+                    if (score1 > score2) {
+                        team1Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                        team2Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                    } else if (score2 > score1) {
+                        team2Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                        team1Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                    }
+                });
+
+                const maleStats = [], femaleStats = [];
+                for (const playerName in stats) {
+                    const pStat = stats[playerName];
+                    pStat.name = playerName;
+                    pStat.netScore = pStat.scoreFor - pStat.scoreAgainst;
+                    if (pStat.gender === 'M') maleStats.push(pStat); else femaleStats.push(pStat);
+                }
+
+                const sortFn = (a, b) => b.wins - a.wins || b.netScore - a.netScore;
+                maleStats.sort(sortFn); femaleStats.sort(sortFn);
+
+                const renderTable = (tbody, data) => {
+                    tbody.innerHTML = data.map((p, index) => `<tr><td>${index + 1}</td><td>${p.name}</td><td>${p.wins}/${p.losses}</td><td>${p.netScore > 0 ? '+' : ''}${p.netScore}</td></tr>`).join('');
+                };
+                renderTable(document.querySelector('#male-rankings tbody'), maleStats);
+                renderTable(document.querySelector('#female-rankings tbody'), femaleStats);
+            }
+
+            function attachEventListeners() {
+                document.getElementById('match-list').addEventListener('click', e => {
+                    const matchEl = e.target.closest('.match');
+                    if (!matchEl) return;
+                    const matchIndex = parseInt(matchEl.id.split('-')[1], 10);
+                    const matchData = matches[matchIndex];
+
+                    if (e.target.classList.contains('edit-score-btn')) {
+                        matchEl.querySelector('.score-display').style.display = 'none';
+                        matchEl.querySelector('.score-input').style.display = 'flex';
+                        e.target.style.display = 'none';
+                        matchEl.querySelector('.save-score-btn').style.display = 'inline-block';
+                        const score = matchData.score || { team1: 0, team2: 0 };
+                        matchEl.querySelector('.score-team1').value = score.team1 || 0;
+                        matchEl.querySelector('.score-team2').value = score.team2 || 0;
+                    } else if (e.target.classList.contains('save-score-btn')) {
+                        const score1 = parseInt(matchEl.querySelector('.score-team1').value, 10) || 0;
+                        const score2 = parseInt(matchEl.querySelector('.score-team2').value, 10) || 0;
+                        matchData.score = { team1: score1, team2: score2 };
+                        matchEl.querySelector('.score-text').textContent = `${score1} : ${score2}`;
+                        matchEl.querySelector('.score-display').style.display = 'block';
+                        matchEl.querySelector('.score-input').style.display = 'none';
+                        e.target.style.display = 'none';
+                        matchEl.querySelector('.edit-score-btn').style.display = 'inline-block';
+                        calculateAndDisplayStats();
+                    }
+                });
+
+                document.getElementById('save-history-btn').addEventListener('click', () => {
+                    const history = JSON.parse(localStorage.getItem(DB_HISTORY_KEY) || '[]');
+                    const newId = historyId || crypto.randomUUID();
+                    const newEntry = { id: newId, timestamp: new Date().toISOString(), players, matches };
+                    
+                    const existingIndex = history.findIndex(item => item.id === historyId);
+                    if (existingIndex > -1) {
+                        history[existingIndex] = newEntry;
+                    } else {
+                        history.push(newEntry);
+                    }
+                    localStorage.setItem(DB_HISTORY_KEY, JSON.stringify(history));
+                    alert('记录已保存！');
+                    if (!historyId) {
+                        // Redirect to the same page but with the history id in session, to change button text
+                        sessionStorage.setItem('current_match_data', JSON.stringify(newEntry));
+                        window.location.reload();
+                    }
+                });
+
+                document.getElementById('shuffle-btn').addEventListener('click', () => {
+                    // This shuffle logic now needs to re-render the list
+                    // For simplicity, we'll just shuffle the `matches` array and re-render
+                    for (let i = matches.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [matches[i], matches[j]] = [matches[j], matches[i]];
+                    }
+                    render(); // Re-render the whole component
+                });
+            }
+
+            render();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>羽毛球对阵生成工具</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --bg-color: #f8f9fa;
+            --font-color: #333;
+            --border-color: #dee2e6;
+            --card-bg: #fff;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--font-color);
+        }
+        .container {
+            max-width: 700px;
+            margin: 2em auto;
+            padding: 2em;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: var(--primary-color);
+        }
+        h2 {
+            color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 2em;
+        }
+        .player-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+        }
+        .player-row input[type="text"] {
+            flex-grow: 1;
+            margin-right: 10px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+        .gender-group { margin-right: 10px; }
+        .actions { margin-top: 15px; display: flex; gap: 10px; }
+        button, input[type="submit"] {
+            cursor: pointer;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        button[type="button"], #add-player, #clear-players {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        button[type="submit"], .submit-btn {
+            background-color: var(--primary-color);
+            color: white;
+            width: 100%;
+            margin-top: 1em;
+        }
+        button:hover, input[type="submit"]:hover {
+            opacity: 0.9;
+        }
+        .form-group { margin: 20px 0; }
+        select, input[type="radio"] { margin-right: 5px; }
+        label { margin-right: 15px; }
+        .history-section {
+            margin-top: 3em;
+        }
+        #history-list {
+            list-style: none;
+            padding: 0;
+        }
+        #history-list li {
+            background-color: #f0f0f0;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        #history-list li a {
+            display: block;
+            padding: 12px 15px;
+            text-decoration: none;
+            color: var(--font-color);
+        }
+        #history-list li:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>羽毛球对阵生成工具</h1>
+        <form action="/generate" method="post" id="main-form">
+            <h2>队员列表</h2>
+            <div id="players-list">
+                <!-- Player rows will be inserted here -->
+            </div>
+            <div class="actions">
+                <button type="button" id="add-player">添加队员</button>
+                <button type="button" id="clear-players">清空列表</button>
+            </div>
+            
+            <div class="form-group">
+                <h2>模式选择</h2>
+                <input type="radio" id="random_doubles" name="mode" value="random_doubles" checked>
+                <label for="random_doubles">随机双打</label>
+                <input type="radio" id="mixed" name="mode" value="mixed">
+                <label for="mixed">男女混双</label>
+            </div>
+            <div class="form-group">
+                <h2>每人对局数</h2>
+                <select name="k" id="k-select" required style="padding: 8px; border-radius: 4px;"></select>
+            </div>
+            <button type="submit" class="submit-btn">生成对阵</button>
+        </form>
+
+        <div class="history-section">
+            <h2>历史记录</h2>
+            <ul id="history-list">
+                {% if history_list %}
+                    {% for item in history_list %}
+                        <li>
+                            <a href="/history/{{ item.id }}">{{ item.title }}</a>
+                        </li>
+                    {% endfor %}
+                {% else %}
+                    <li>暂无历史记录</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const playersList = document.getElementById('players-list');
+        const addPlayerBtn = document.getElementById('add-player');
+        const clearPlayersBtn = document.getElementById('clear-players');
+        const kSelect = document.getElementById('k-select');
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        let playerCount = 0;
+
+        function savePlayers() {
+            const players = getPlayersData(false); // Get data without renumbering
+            localStorage.setItem('badmintonPlayers', JSON.stringify(players));
+        }
+
+        function loadPlayers() {
+            const savedPlayers = localStorage.getItem('badmintonPlayers');
+            if (savedPlayers) {
+                const players = JSON.parse(savedPlayers);
+                if (players && players.length > 0) {
+                    players.forEach(player => addPlayer(player.name, player.gender));
+                    return;
+                }
+            }
+            // Add initial 6 players if nothing is loaded
+            for (let i = 0; i < 6; i++) {
+                addPlayer();
+            }
+        }
+
+        function createPlayerRow(id, name = '', gender = 'M') {
+            const div = document.createElement('div');
+            div.className = 'player-row';
+            div.id = `player-row-${id}`;
+            div.innerHTML = `
+                <input type="text" name="player-name-${id}" placeholder="队员姓名" value="${name}" required>
+                <span class="gender-group">
+                    <input type="radio" id="gender-m-${id}" name="player-gender-${id}" value="M" ${gender === 'M' ? 'checked' : ''}> <label for="gender-m-${id}">男</label>
+                    <input type="radio" id="gender-f-${id}" name="player-gender-${id}" value="F" ${gender === 'F' ? 'checked' : ''}> <label for="gender-f-${id}">女</label>
+                </span>
+                <button type="button" onclick="removePlayer(this)">删除</button>
+            `;
+            return div;
+        }
+
+        function addPlayer(name = '', gender = 'M') {
+            const newRow = createPlayerRow(playerCount, name, gender);
+            playersList.appendChild(newRow);
+            playerCount++;
+            renumberPlayers(); // Renumber to ensure IDs are correct before saving
+            savePlayers();
+            updateKOptions();
+        }
+
+        window.removePlayer = function(button) {
+            button.parentElement.remove();
+            renumberPlayers();
+            savePlayers();
+            updateKOptions();
+        }
+        
+        function renumberPlayers() {
+            const rows = playersList.getElementsByClassName('player-row');
+            playerCount = rows.length;
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                row.id = `player-row-${i}`;
+                const nameInput = row.querySelector('input[type="text"]');
+                nameInput.name = `player-name-${i}`;
+                
+                const genderRadios = row.querySelectorAll('input[type="radio"]');
+                const oldIdM = genderRadios[0].id;
+                const oldIdF = genderRadios[1].id;
+
+                genderRadios[0].name = `player-gender-${i}`;
+                genderRadios[0].id = `gender-m-${i}`;
+                row.querySelector(`label[for="${oldIdM}"]`).htmlFor = `gender-m-${i}`;
+                
+                genderRadios[1].name = `player-gender-${i}`;
+                genderRadios[1].id = `gender-f-${i}`;
+                row.querySelector(`label[for="${oldIdF}"]`).htmlFor = `gender-f-${i}`;
+            }
+        }
+
+        function getPlayersData(doRenumber = true) {
+            if (doRenumber) {
+                renumberPlayers();
+            }
+            const players = [];
+            const rows = playersList.getElementsByClassName('player-row');
+            for (let i = 0; i < rows.length; i++) {
+                const nameInput = rows[i].querySelector('input[type="text"]');
+                const genderInput = rows[i].querySelector('input[type="radio"]:checked');
+                if (nameInput && nameInput.value && genderInput) {
+                    players.push({
+                        name: nameInput.value,
+                        gender: genderInput.value
+                    });
+                }
+            }
+            return players;
+        }
+
+        async function updateKOptions() {
+            const players = getPlayersData(false);
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+
+            const response = await fetch('/get_k_options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ players, mode })
+            });
+            const options = await response.json();
+
+            kSelect.innerHTML = '';
+            if (options.length > 0) {
+                options.forEach(k => {
+                    const option = document.createElement('option');
+                    option.value = k;
+                    option.textContent = k;
+                    kSelect.appendChild(option);
+                });
+            } else {
+                const option = document.createElement('option');
+                option.textContent = '无可用局数';
+                kSelect.appendChild(option);
+            }
+        }
+
+        addPlayerBtn.addEventListener('click', () => addPlayer());
+        
+        clearPlayersBtn.addEventListener('click', () => {
+            playersList.innerHTML = '';
+            playerCount = 0;
+            localStorage.removeItem('badmintonPlayers');
+            for (let i = 0; i < 6; i++) { addPlayer(); }
+            updateKOptions();
+        });
+
+        modeRadios.forEach(radio => radio.addEventListener('change', updateKOptions));
+        playersList.addEventListener('input', (event) => {
+            if (event.target.tagName === 'INPUT') {
+                savePlayers();
+                updateKOptions();
+            }
+        });
+        
+        document.getElementById('main-form').addEventListener('submit', () => {
+            renumberPlayers();
+        });
+
+        loadPlayers();
+    </script>
+</body>
+</html>
