@@ -13,7 +13,7 @@ def get_possible_k(num_players, mode, num_males=0, num_females=0):
     options = []
     max_k = 20
     if mode == 'mixed':
-        if num_players < 4 or num_males < 2 or num_females < 2:
+        if num_males < 2 or num_females < 2:
             return []
         for k in range(1, max_k + 1):
             if (num_males * k) % 2 == 0 and (num_females * k) % 2 == 0:
@@ -21,9 +21,12 @@ def get_possible_k(num_players, mode, num_males=0, num_females=0):
     elif mode == 'singles_robin':
         if num_players < 2:
             return []
-        for k in range(1, max_k + 1):
-            if (num_players * k) % 2 == 0:
+        round_robin_games = num_players - 1
+        if round_robin_games > 0:
+            k = round_robin_games
+            while k <= max_k:
                 options.append(k)
+                k += round_robin_games
     else: # 'random_doubles'
         if num_players < 4:
             return []

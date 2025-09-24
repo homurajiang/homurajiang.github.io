@@ -65,12 +65,16 @@
                             <a href="index.html">返回首页</a>
                         </div>
                         <div class="match-list" id="match-list">
-                            ${matches.map((match, index) => `
-                                <div class="match" id="match-${index}" data-players="${match.team1[0]},${match.team1[1]},${match.team2[0]},${match.team2[1]}">
+                            ${matches.map((match, index) => {
+                                const team1Text = match.team1.join(' & ');
+                                const team2Text = match.team2.join(' & ');
+                                const playersStr = [...match.team1, ...match.team2].join(',');
+                                return `
+                                <div class="match" id="match-${index}" data-players="${playersStr}">
                                     <div class="teams">
-                                        <span class="team">${match.team1[0]} & ${match.team1[1]}</span>
+                                        <span class="team">${team1Text}</span>
                                         <span class="vs">VS</span>
-                                        <span class="team">${match.team2[0]} & ${match.team2[1]}</span>
+                                        <span class="team">${team2Text}</span>
                                     </div>
                                     <div class="score-container">
                                         <div class="score-display"><span class="score-text">${(match.score && match.score.team1 != null) ? `${match.score.team1} : ${match.score.team2}` : '-- : --'}</span></div>
@@ -83,7 +87,7 @@
                                         </div>
                                     </div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                     <div class="stats-panel">

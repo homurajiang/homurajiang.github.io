@@ -79,7 +79,7 @@
         }
 
         function loadPlayers() {
-            const saved = localStorage.getItem(DBKEYS.PLAYERS);
+            const saved = localStorage.getItem(DB_KEYS.PLAYERS);
             if (saved) {
                 const players = JSON.parse(saved);
                 if (players && players.length > 0) {
