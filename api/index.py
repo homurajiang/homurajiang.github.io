@@ -10,17 +10,23 @@ CORS(app) # 允许所有来源的跨域请求
 
 # --- 核心算法 (与之前相同) ---
 def get_possible_k(num_players, mode, num_males=0, num_females=0):
-    if num_players < 4:
-        return []
     options = []
     max_k = 20
     if mode == 'mixed':
-        if num_males < 2 or num_females < 2:
+        if num_players < 4 or num_males < 2 or num_females < 2:
             return []
         for k in range(1, max_k + 1):
             if (num_males * k) % 2 == 0 and (num_females * k) % 2 == 0:
                 options.append(k)
-    else:
+    elif mode == 'singles_robin':
+        if num_players < 2:
+            return []
+        for k in range(1, max_k + 1):
+            if (num_players * k) % 2 == 0:
+                options.append(k)
+    else: # 'random_doubles'
+        if num_players < 4:
+            return []
         for k in range(1, max_k + 1):
             if (num_players * k) % 4 == 0:
                 options.append(k)
@@ -65,6 +71,51 @@ def generate_random_doubles(players, k):
             partnerships[p3['name']][p4['name']] += 1
             partnerships[p4['name']][p3['name']] += 1
         else: break
+    return matches
+
+def generate_singles_robin(players, k):
+    num_players = len(players)
+    player_names = [p['name'] for p in players]
+
+    if (num_players * k) % 2 != 0:
+        raise ValueError("球员总数和每人对局数的乘积必须为偶数。")
+
+    total_matches = (num_players * k) // 2
+    
+    games_played = defaultdict(int)
+    opponents = defaultdict(lambda: defaultdict(int))
+    matches = []
+    
+    match_pool = list(combinations(player_names, 2))
+    
+    attempts = 0
+    max_attempts = total_matches * 5
+
+    while len(matches) < total_matches and attempts < max_attempts:
+        attempts += 1
+        # Sort pool by how many times pairs have played
+        match_pool.sort(key=lambda p: opponents[p[0]][p[1]])
+        
+        match_added_in_pass = False
+        for p1, p2 in match_pool:
+            if games_played[p1] < k and games_played[p2] < k:
+                # Check if this match is already in the list to avoid duplicates in the same batch
+                # This simple check is not perfect but helps diversity
+                is_present = any(m for m in matches if (p1 in m['team1'] and p2 in m['team2']) or (p2 in m['team1'] and p1 in m['team2']))
+
+                # A simple greedy choice might be better
+                matches.append({'team1': [p1], 'team2': [p2]})
+                games_played[p1] += 1
+                games_played[p2] += 1
+                opponents[p1][p2] += 1
+                opponents[p2][p1] += 1
+                match_added_in_pass = True
+                break # Move to next attempt to re-sort and pick the best next
+        
+        if not match_added_in_pass:
+            # If a full pass on match_pool yields no result, we might be stuck
+            break
+
     return matches
 
 def generate_mixed_doubles(players, k):
@@ -120,12 +171,16 @@ def generate():
 
     if not all([players, mode, k]):
         return jsonify({'error': 'Missing parameters'}), 400
-    if len(players) < 6:
-        return jsonify({'error': '队员人数必须至少为6人。'}), 400
+    
+    min_players = 2 if mode == 'singles_robin' else 6
+    if len(players) < min_players:
+        return jsonify({'error': f'队员人数必须至少为{min_players}人。'}), 400
 
     try:
         if mode == 'mixed':
             matches = generate_mixed_doubles(players, k)
+        elif mode == 'singles_robin':
+            matches = generate_singles_robin(players, k)
         else:
             matches = generate_random_doubles(players, k)
         return jsonify({'matches': matches, 'players': players})
