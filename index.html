@@ -87,9 +87,13 @@
                     return;
                 }
             }
+            // 仅在没有保存数据时才添加默认玩家
             for (let i = 0; i < 6; i++) addPlayer();
         }
 
+        // 添加页面离开前自动保存
+        window.addEventListener('beforeunload', savePlayers);
+        
         function createPlayerRow(id, name = '', gender = 'M') {
             const div = document.createElement('div');
             div.className = 'player-row';

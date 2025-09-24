@@ -62,12 +62,13 @@
                         <div class="top-actions">
                             <button id="shuffle-btn">随机排序对局</button>
                             <button id="save-history-btn">${historyId ? '更新记录' : '保存对局记录'}</button>
-                            <a href="index.html">返回首页</a>
+                            <a href="index.html" id="back-to-home">返回首页</a>
                         </div>
                         <div class="match-list" id="match-list">
                             ${matches.map((match, index) => {
-                                const team1Text = match.team1.join(' & ');
-                                const team2Text = match.team2.join(' & ');
+                                const isSingles = match.team1.length === 1 && match.team2.length === 1;
+                                const team1Text = isSingles ? match.team1[0] : `${match.team1[0]} & ${match.team1[1]}`;
+                                const team2Text = isSingles ? match.team2[0] : `${match.team2[0]} & ${match.team2[1]}`;
                                 const playersStr = [...match.team1, ...match.team2].join(',');
                                 return `
                                 <div class="match" id="match-${index}" data-players="${playersStr}">
@@ -148,6 +149,14 @@
             }
 
             function attachEventListeners() {
+                // 添加返回首页前的保存逻辑
+                document.getElementById('back-to-home').addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // 确保首页能获取到最新数据
+                    sessionStorage.setItem('temp_players_data', JSON.stringify(players));
+                    window.location.href = this.href;
+                });
+
                 document.getElementById('match-list').addEventListener('click', e => {
                     const matchEl = e.target.closest('.match');
                     if (!matchEl) return;
