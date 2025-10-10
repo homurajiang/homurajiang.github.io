@@ -77,6 +77,7 @@
             function initializeApp(data) {
                 const { matches, players, id: historyId, name } = data;
 
+                // 如果 URL 中没有 ID，则更新 URL，实现分享功能
                 if (!matchIdFromUrl && historyId) {
                     const newUrl = `${window.location.pathname}?id=${historyId}`;
                     window.history.replaceState({ path: newUrl }, '', newUrl);
@@ -85,6 +86,7 @@
                 function render() {
                     if (!matches || !players) {
                         console.error("对局或队员数据缺失，无法渲染页面。");
+                        root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">数据不完整，无法加载对局。</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
                         return;
                     }
                     const pageTitle = name ? name : '对阵结果';
@@ -110,6 +112,11 @@
                             <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
                         </div>
                     </div>`;
+
+                    // 在主框架渲染完成后，再执行依赖于 DOM 的操作
+                    renderMatchList();
+                    calculateAndDisplayStats();
+                    attachEventListeners();
                 }
 
                 function renderMatchList() {
@@ -268,10 +275,8 @@
                     });
                 }
 
+                // 启动应用
                 render();
-                renderMatchList(); // 初始渲染对局列表
-                calculateAndDisplayStats();
-                attachEventListeners();
             }
         });
     </script>
