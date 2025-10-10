@@ -33,6 +33,8 @@
         .stats-panel th, .stats-panel td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color); }
         .stats-panel th { background-color: #f2f2f2; }
         .stats-panel td:first-child, .stats-panel td:last-child { text-align: center; }
+        .loader { border: 8px solid #f3f3f3; border-top: 8px solid var(--primary-color); border-radius: 50%; width: 60px; height: 60px; animation: spin 1.5s linear infinite; margin: 50px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -52,8 +54,25 @@
             }
 
             async function loadDataFromBackend(id) {
+                // 1. 立即显示加载动画
+                root.innerHTML = `<div class="container"><div class="loader"></div><p style="text-align:center; color: var(--secondary-color);">正在从云端加载对局数据...</p></div>`;
+
+                // 2. 实现带超时的 fetch
+                const controller = new AbortController();
+                const signal = controller.signal;
+                const fetchTimeout = 15000; // 15秒超时
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => {
+                        controller.abort();
+                        reject(new Error('请求超时'));
+                    }, fetchTimeout)
+                );
+
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/history/${id}`);
+                    const fetchPromise = fetch(`${API_BASE_URL}/api/history/${id}`, { signal });
+                    const response = await Promise.race([fetchPromise, timeoutPromise]);
+
                     if (!response.ok) {
                         const err = await response.json();
                         throw new Error(err.error || '对局记录加载失败');
@@ -61,7 +80,14 @@
                     const data = await response.json();
                     initializeApp(data);
                 } catch (error) {
-                    root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">${error.message}</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
+                    // 3. 提供友好的错误提示
+                    let errorMessage = error.message;
+                    if (errorMessage.includes('请求超时') || error.name === 'AbortError') {
+                        errorMessage = '服务器响应超时。这可能是由于当前网络环境访问国外服务器较慢，请检查您的网络或稍后重试。';
+                    } else if (errorMessage.includes('Failed to fetch')) {
+                        errorMessage = '网络连接失败，无法连接到后端服务器。请检查您的网络设置或稍后重试。';
+                    }
+                    root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>加载失败</h1><p class="error">${errorMessage}</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
                 }
             }
 
