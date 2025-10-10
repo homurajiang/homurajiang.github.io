@@ -14,8 +14,11 @@ app = Flask(__name__)
 CORS(app) # 允许所有来源的跨域请求
 
 # --- Redis 连接 ---
-# 优先从环境变量获取 REDIS_URL，如果不存在，则使用您提供的值作为后备
-redis_url = os.environ.get('REDIS_URL', "redis://default:2aTcH5uXHHgOlsC9FBZOQJdfbMnOnrSj@redis-16255.c292.ap-southeast-1-1.ec2.redns.redis-cloud.com:16255")
+# 使用您提供的正确环境变量名
+redis_url = os.environ.get('homurajiang_badminton_REDIS_URL')
+if not redis_url:
+    # 如果在 Vercel 环境中未设置此变量，则抛出错误
+    raise ValueError("环境变量 homurajiang_badminton_REDIS_URL 未设置。")
 db = redis.from_url(redis_url, decode_responses=True)
 
 # --- 核心算法 (保持不变) ---

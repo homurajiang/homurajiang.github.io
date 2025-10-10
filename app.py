@@ -316,5 +316,121 @@ def update_history(history_id):
     return jsonify({'status': 'success'})
 
 
+import os
+import json
+import uuid
+from datetime import datetime
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+import redis
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
+
+# 初始化Flask应用
+app = Flask(__name__, static_folder='.', static_url_path='')
+CORS(app)
+
+# 连接Redis数据库
+# 使用您提供的正确环境变量名
+redis_url = os.environ.get('homurajiang_badminton_REDIS_URL')
+if not redis_url:
+    raise ValueError("请确保 .env 文件中或环境变量里设置了 homurajiang_badminton_REDIS_URL。")
+db = redis.from_url(redis_url, decode_responses=True)
+
+# 导入核心算法函数
+from api.index import get_possible_k, generate_random_doubles, generate_mixed_doubles, generate_singles_robin
+
+# API路由
+@app.route('/api/get_k_options', methods=['POST'])
+def get_k_options_route():
+    data = request.get_json()
+    players = data.get('players', [])
+    mode = data.get('mode', 'random_doubles')
+    num_players = len(players)
+    num_males = sum(1 for p in players if p['gender'] == 'M')
+    num_females = sum(1 for p in players if p['gender'] == 'F')
+    options = get_possible_k(num_players, mode, num_males, num_females)
+    return jsonify(options)
+
+@app.route('/api/generate', methods=['POST'])
+def generate():
+    data = request.get_json()
+    players = data.get('players', [])
+    mode = data.get('mode')
+    k = data.get('k')
+
+    if not all([players, mode, k]):
+        return jsonify({'error': 'Missing parameters'}), 400
+    if len(players) < 2:
+        return jsonify({'error': '队员人数必须至少为2人。'}), 400
+
+    try:
+        if mode == 'mixed':
+            matches = generate_mixed_doubles(players, k)
+        elif mode == 'singles_robin':
+            matches = generate_singles_robin(players, k)
+        else:
+            matches = generate_random_doubles(players, k)
+        
+        response_data = {
+            'matches': matches, 
+            'players': players, 
+            'mode': mode, 
+            'k': k,
+            'id': str(uuid.uuid4()),
+            'timestamp': None
+        }
+        return jsonify(response_data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/history', methods=['GET', 'POST'])
+def handle_history():
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data or 'id' not in data:
+            return jsonify({'error': '无效的数据格式'}), 400
+        
+        record_id = data['id']
+        if not data.get('timestamp'):
+            data['timestamp'] = datetime.utcnow().isoformat()
+
+        try:
+            db.hset('histories', record_id, json.dumps(data))
+            return jsonify({'success': True, 'id': record_id}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if request.method == 'GET':
+        try:
+            all_histories_raw = db.hvals('histories')
+            all_histories = [json.loads(h) for h in all_histories_raw]
+            all_histories.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            return jsonify(all_histories), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history/<record_id>', methods=['DELETE'])
+def handle_history_record(record_id):
+    try:
+        result = db.hdel('histories', record_id)
+        if result == 0:
+            return jsonify({'error': '记录未找到'}), 404
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# 提供静态文件访问
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('.', path)
+
+# 本地运行入口
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5000)
