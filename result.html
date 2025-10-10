@@ -60,7 +60,7 @@
                 // 2. 实现带超时的 fetch
                 const controller = new AbortController();
                 const signal = controller.signal;
-                const fetchTimeout = 15000; // 15秒超时
+                const fetchTimeout = 30000; // 超时时间延长至 30 秒
 
                 const timeoutPromise = new Promise((_, reject) =>
                     setTimeout(() => {
