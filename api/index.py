@@ -11,25 +11,26 @@ from datetime import datetime
 
 # Vercel 会将这个 'app' 变量作为应用实例
 app = Flask(__name__)
-CORS(app) # 允许所有来源的跨域请求
+# 显式配置 CORS，以更好地处理跨域预检请求
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# --- Redis 连接 (Python 版本) ---
-# 从 Vercel 环境变量获取 Redis 连接信息
-redis_url = os.environ.get('homurajiang_badminton_REDIS_URL')
-if not redis_url:
-    raise ValueError("Redis URL 环境变量未设置，请在 Vercel 控制台配置")
-
-# 初始化 Redis 客户端
+# --- Redis 连接 ---
+db = None
 try:
-    db = redis.from_url(redis_url, decode_responses=True)
-    # 测试连接
-    db.ping()
-    app.logger.info("Redis 连接成功")
+    # 从环境变量获取 Redis URL
+    redis_url = os.environ.get('homurajiang_badminton_REDIS_URL')
+    if redis_url:
+        db = redis.from_url(redis_url, decode_responses=True)
+        db.ping() # 测试连接
+        app.logger.info("成功连接到 Redis。")
+    else:
+        app.logger.warning("未设置 REDIS_URL 环境变量，数据库功能将被禁用。")
 except Exception as e:
-    app.logger.error(f"Redis 连接失败: {str(e)}")
-    raise
+    # 如果连接失败，记录错误，db 将保持为 None
+    app.logger.error(f"连接到 Redis 失败: {e}")
+    db = None
 
-# --- 核心算法代码保持不变 ---
+# --- 核心算法 (保持不变) ---
 def get_possible_k(num_players, mode, num_males=0, num_females=0):
     options = []
     max_k = 20
@@ -78,7 +79,7 @@ def generate_random_doubles(players, k):
             for j in range(i + 1, len(scored_pairs)):
                 pair2, score2 = scored_pairs[j]
                 p3, p4 = pair2
-                if p1 not in pair2 and p2 not in pair2:
+                if pair1[0] not in pair2 and pair1[1] not in pair2:
                     current_total_score = score1 + score2
                     if current_total_score < lowest_total_score:
                         lowest_total_score = current_total_score
@@ -100,46 +101,30 @@ def generate_random_doubles(players, k):
 def generate_singles_robin(players, k):
     num_players = len(players)
     player_names = [p['name'] for p in players]
-
     if (num_players * k) % 2 != 0:
         raise ValueError("球员总数和每人对局数的乘积必须为偶数。")
-
     total_matches = (num_players * k) // 2
-    
     games_played = defaultdict(int)
     opponents = defaultdict(lambda: defaultdict(int))
     matches = []
-    
     match_pool = list(combinations(player_names, 2))
-    
     attempts = 0
     max_attempts = total_matches * 5
-
     while len(matches) < total_matches and attempts < max_attempts:
         attempts += 1
-        # Sort pool by how many times pairs have played
         match_pool.sort(key=lambda p: opponents[p[0]][p[1]])
-        
         match_added_in_pass = False
         for p1, p2 in match_pool:
             if games_played[p1] < k and games_played[p2] < k:
-                # Check if this match is already in the list to avoid duplicates in the same batch
-                # This simple check is not perfect but helps diversity
-                is_present = any(m for m in matches if (p1 in m['team1'] and p2 in m['team2']) or (p2 in m['team1'] and p1 in m['team2']))
-
-                # A simple greedy choice might be better
                 matches.append({'team1': [p1], 'team2': [p2]})
                 games_played[p1] += 1
                 games_played[p2] += 1
                 opponents[p1][p2] += 1
                 opponents[p2][p1] += 1
                 match_added_in_pass = True
-                break # Move to next attempt to re-sort and pick the best next
-        
+                break
         if not match_added_in_pass:
-            # If a full pass on match_pool yields no result, we might be stuck
             break
-
     return matches
 
 def generate_mixed_doubles(players, k):
@@ -192,12 +177,12 @@ def generate():
     players = data.get('players', [])
     mode = data.get('mode')
     k = data.get('k')
-    name = data.get('name', '') # 获取对局名称
+    name = data.get('name', '')
 
     if not all([players, mode, k]):
         return jsonify({'error': 'Missing parameters'}), 400
     
-    min_players = 2 if mode == 'singles_robin' else 6
+    min_players = 2 if mode == 'singles_robin' else 4
     if len(players) < min_players:
         return jsonify({'error': f'队员人数必须至少为{min_players}人。'}), 400
 
@@ -208,30 +193,32 @@ def generate():
             matches = generate_singles_robin(players, k)
         else:
             matches = generate_random_doubles(players, k)
-        # 在生成对局时，为新记录准备一个临时的UUID，但不立即保存
+        
         response_data = {
             'matches': matches, 
             'players': players, 
             'mode': mode, 
             'k': k,
-            'id': str(uuid.uuid4()), # 这是一个临时ID，用于前端标识
-            'timestamp': None, # 时间戳将在保存时设置
-            'name': name # 添加对局名称
+            'id': str(uuid.uuid4()),
+            'timestamp': None,
+            'name': name
         }
         return jsonify(response_data)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
-# --- 新增：历史记录 API ---
+# --- 历史记录 API (带错误处理) ---
 @app.route('/api/history', methods=['GET', 'POST'])
 def handle_history():
+    if db is None:
+        return jsonify({'error': '数据库服务不可用。'}), 503
+
     if request.method == 'POST':
         data = request.get_json()
         if not data or 'id' not in data:
             return jsonify({'error': '无效的数据格式'}), 400
         
         record_id = data['id']
-        # 如果是新记录，设置时间戳
         if not data.get('timestamp'):
             data['timestamp'] = datetime.utcnow().isoformat()
 
@@ -239,7 +226,8 @@ def handle_history():
             db.hset('histories', record_id, json.dumps(data))
             return jsonify({'success': True, 'id': record_id}), 200
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            app.logger.error(f"保存历史记录失败 (ID: {record_id}): {e}")
+            return jsonify({'error': '无法向数据库写入数据。'}), 500
 
     if request.method == 'GET':
         try:
@@ -248,10 +236,14 @@ def handle_history():
             all_histories.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             return jsonify(all_histories), 200
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            app.logger.error(f"获取全部历史记录失败: {e}")
+            return jsonify({'error': '无法从数据库读取数据。'}), 500
 
 @app.route('/api/history/<record_id>', methods=['GET', 'DELETE'])
 def handle_history_record(record_id):
+    if db is None:
+        return jsonify({'error': '数据库服务不可用。'}), 503
+
     if request.method == 'GET':
         try:
             record_raw = db.hget('histories', record_id)
@@ -259,51 +251,20 @@ def handle_history_record(record_id):
                 return jsonify({'error': '记录未找到'}), 404
             return jsonify(json.loads(record_raw)), 200
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            app.logger.error(f"获取单条历史记录失败 (ID: {record_id}): {e}")
+            return jsonify({'error': '无法从数据库读取数据。'}), 500
 
     if request.method == 'DELETE':
         try:
             result = db.hdel('histories', record_id)
             if result == 0:
                 return jsonify({'error': '记录未找到'}), 404
-        return jsonify({'success': True}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            return jsonify({'success': True}), 200
+        except Exception as e:
+            app.logger.error(f"删除历史记录失败 (ID: {record_id}): {e}")
+            return jsonify({'error': '无法从数据库删除数据。'}), 500
 
 # Vercel 会处理静态文件，这个根路由可以用于健康检查
 @app.route('/')
 def home():
     return "Backend is running."
-
-
-@app.route('/api/history', methods=['POST'])
-def save_history():
-    data = request.get_json()
-    if not data or 'id' not in data:
-        return jsonify({'error': '无效的数据格式'}), 400
-    
-    record_id = data['id']
-    # 确保时间戳存在
-    if not data.get('timestamp'):
-        data['timestamp'] = datetime.utcnow().isoformat()
-    
-    try:
-        # 保存到 Redis (使用哈希表存储所有历史记录)
-        db.hset('match_history', record_id, json.dumps(data))
-        return jsonify({'success': True, 'record_id': record_id}), 200
-    except Exception as e:
-        app.logger.error(f"保存历史记录失败: {str(e)}")
-        return jsonify({'error': f'保存失败: {str(e)}'}), 500
-
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    try:
-        # 从 Redis 获取所有历史记录
-        all_records = db.hvals('match_history')
-        history = [json.loads(record) for record in all_records]
-        # 按时间戳排序
-        history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        return jsonify(history), 200
-    except Exception as e:
-        app.logger.error(f"获取历史记录失败: {str(e)}")
-        return jsonify({'error': f'获取记录失败: {str(e)}'}), 500
