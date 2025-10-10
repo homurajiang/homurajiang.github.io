@@ -40,203 +40,239 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 必须指向您部署在 Vercel 上的后端服务地址
             const API_BASE_URL = 'https://homurajiang-github-io.vercel.app';
             const root = document.getElementById('root');
-            const dataString = sessionStorage.getItem('current_match_data');
+            const urlParams = new URLSearchParams(window.location.search);
+            const matchIdFromUrl = urlParams.get('id');
 
-            if (!dataString) {
-                root.innerHTML = `<div class="container" style="max-width: 800px;">
-                    <h1>错误</h1><p class="error">没有找到对局数据，请返回首页重新生成。</p>
-                    <div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
-                return;
+            if (matchIdFromUrl) {
+                loadDataFromBackend(matchIdFromUrl);
+            } else {
+                loadDataFromSession();
             }
 
-            const data = JSON.parse(dataString);
-            // 确保所有需要的键都存在，即使是从历史记录加载的
-            const { matches, players, id: historyId, mode, k } = data;
-
-            function render() {
-                // 确保 data 对象存在
-                if (!data) return;
-
-                root.innerHTML = `
-                <div class="main-container">
-                    <div class="container">
-                        <h1>对阵结果</h1>
-                        <div class="top-actions">
-                            <button id="shuffle-btn">随机排序对局</button>
-                            <button id="save-history-btn">${data.timestamp ? '更新记录' : '保存对局记录'}</button>
-                            <a href="index.html">返回首页</a>
-                        </div>
-                        <div class="match-list" id="match-list">
-                            ${matches.map((match, index) => {
-                                const isSingles = match.team1.length === 1 && match.team2.length === 1;
-                                const team1Text = isSingles ? match.team1[0] : `${match.team1[0]} & ${match.team1[1]}`;
-                                const team2Text = isSingles ? match.team2[0] : `${match.team2[0]} & ${match.team2[1]}`;
-                                const playersStr = [...match.team1, ...match.team2].join(',');
-                                return `
-                                <div class="match" id="match-${index}" data-players="${playersStr}">
-                                    <div class="teams">
-                                        <span class="team">${team1Text}</span>
-                                        <span class="vs">VS</span>
-                                        <span class="team">${team2Text}</span>
-                                    </div>
-                                    <div class="score-container">
-                                        <div class="score-display"><span class="score-text">${(match.score && match.score.team1 != null) ? `${match.score.team1} : ${match.score.team2}` : '-- : --'}</span></div>
-                                        <div class="score-input" style="display: none;">
-                                            <input type="number" class="score-team1" min="0" value="0"> : <input type="number" class="score-team2" min="0" value="0">
-                                        </div>
-                                        <div class="score-actions">
-                                            <button class="edit-score-btn">输入比分</button>
-                                            <button class="save-score-btn" style="display: none;">保存</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            `}).join('')}
-                        </div>
-                    </div>
-                    <div class="stats-panel">
-                        <h2>实时统计</h2>
-                        <h3>男子排名</h3>
-                        <table id="male-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
-                        <h3>女子排名</h3>
-                        <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
-                    </div>
-                </div>`;
-            }
-
-            function calculateAndDisplayStats() {
-                const stats = {};
-                players.forEach(p => { stats[p.name] = { wins: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, gender: p.gender }; });
-
-                document.querySelectorAll('.match').forEach((matchEl, index) => {
-                    const matchData = matches[index];
-                    if (!matchData.score || matchData.score.team1 == null) return;
-
-                    const team1Players = matchData.team1;
-                    const team2Players = matchData.team2;
-                    const score1 = parseInt(matchData.score.team1, 10);
-                    const score2 = parseInt(matchData.score.team2, 10);
-
-                    if (isNaN(score1) || isNaN(score2)) return;
-
-                    team1Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score1; stats[p].scoreAgainst += score2; } });
-                    team2Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score2; stats[p].scoreAgainst += score1; } });
-
-                    if (score1 > score2) {
-                        team1Players.forEach(p => { if(stats[p]) stats[p].wins++; });
-                        team2Players.forEach(p => { if(stats[p]) stats[p].losses++; });
-                    } else if (score2 > score1) {
-                        team2Players.forEach(p => { if(stats[p]) stats[p].wins++; });
-                        team1Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+            async function loadDataFromBackend(id) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/history/${id}`);
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.error || '对局记录加载失败');
                     }
-                });
-
-                const maleStats = [], femaleStats = [];
-                for (const playerName in stats) {
-                    const pStat = stats[playerName];
-                    pStat.name = playerName;
-                    pStat.netScore = pStat.scoreFor - pStat.scoreAgainst;
-                    if (pStat.gender === 'M') maleStats.push(pStat); else femaleStats.push(pStat);
+                    const data = await response.json();
+                    initializeApp(data);
+                } catch (error) {
+                    root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">${error.message}</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
                 }
-
-                const sortFn = (a, b) => b.wins - a.wins || b.netScore - a.netScore;
-                maleStats.sort(sortFn); femaleStats.sort(sortFn);
-
-                const renderTable = (tbody, data) => {
-                    tbody.innerHTML = data.map((p, index) => `<tr><td>${index + 1}</td><td>${p.name}</td><td>${p.wins}/${p.losses}</td><td>${p.netScore > 0 ? '+' : ''}${p.netScore}</td></tr>`).join('');
-                };
-                renderTable(document.querySelector('#male-rankings tbody'), maleStats);
-                renderTable(document.querySelector('#female-rankings tbody'), femaleStats);
             }
 
-            function attachEventListeners() {
-                const saveBtn = document.getElementById('save-history-btn');
-                const shuffleBtn = document.getElementById('shuffle-btn');
-                const matchList = document.getElementById('match-list');
-
-                if (!saveBtn || !shuffleBtn || !matchList) {
-                    console.error("一个或多个关键元素未找到，事件监听器无法附加。");
+            function loadDataFromSession() {
+                const dataString = sessionStorage.getItem('current_match_data');
+                if (!dataString) {
+                    root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">没有找到对局数据，请返回首页重新生成。</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
                     return;
                 }
-
-                matchList.addEventListener('click', e => {
-                    const matchEl = e.target.closest('.match');
-                    if (!matchEl) return;
-                    const matchIndex = parseInt(matchEl.id.split('-')[1], 10);
-                    const matchData = matches[matchIndex];
-
-                    if (e.target.classList.contains('edit-score-btn')) {
-                        matchEl.querySelector('.score-display').style.display = 'none';
-                        matchEl.querySelector('.score-input').style.display = 'flex';
-                        e.target.style.display = 'none';
-                        matchEl.querySelector('.save-score-btn').style.display = 'inline-block';
-                        const score = matchData.score || { team1: 0, team2: 0 };
-                        matchEl.querySelector('.score-team1').value = score.team1 || 0;
-                        matchEl.querySelector('.score-team2').value = score.team2 || 0;
-                    } else if (e.target.classList.contains('save-score-btn')) {
-                        const score1 = parseInt(matchEl.querySelector('.score-team1').value, 10) || 0;
-                        const score2 = parseInt(matchEl.querySelector('.score-team2').value, 10) || 0;
-                        matchData.score = { team1: score1, team2: score2 };
-                        matchEl.querySelector('.score-text').textContent = `${score1} : ${score2}`;
-                        matchEl.querySelector('.score-display').style.display = 'block';
-                        matchEl.querySelector('.score-input').style.display = 'none';
-                        e.target.style.display = 'none';
-                        matchEl.querySelector('.edit-score-btn').style.display = 'inline-block';
-                        calculateAndDisplayStats();
-                    }
-                });
-
-                saveBtn.addEventListener('click', async () => {
-                    saveBtn.disabled = true;
-                    saveBtn.textContent = '保存中...';
-
-                    // 确保发送到后端的数据是最新的
-                    const dataToSave = { ...data, matches };
-
-                    try {
-                        const response = await fetch(`${API_BASE_URL}/api/history`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(dataToSave)
-                        });
-
-                        if (response.ok) {
-                            alert('记录已成功保存到云端！');
-                            if (!data.timestamp) {
-                                data.timestamp = new Date().toISOString();
-                                sessionStorage.setItem('current_match_data', JSON.stringify(data));
-                            }
-                            saveBtn.textContent = '更新记录';
-                        } else {
-                            const err = await response.json();
-                            throw new Error(err.error || '保存失败');
-                        }
-                    } catch (error) {
-                        alert(`保存失败: ${error.message}`);
-                        saveBtn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
-                    } finally {
-                        saveBtn.disabled = false;
-                    }
-                });
-
-                shuffleBtn.addEventListener('click', () => {
-                    for (let i = matches.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [matches[i], matches[j]] = [matches[j], matches[i]];
-                    }
-                    render(); // 重新渲染整个页面
-                    // 注意：重新渲染后，旧的事件监听器会丢失，但因为我们是在同一个页面生命周期内，
-                    // 并且没有重新加载页面，所以这里的事件监听器仍然有效。
-                    // 如果 render() 导致页面完全重载，则需要重新附加监听器。
-                });
+                initializeApp(JSON.parse(dataString));
             }
 
-            // 确保在 DOM 渲染后执行所有操作
-            render();
-            calculateAndDisplayStats();
-            attachEventListeners();
+            function initializeApp(data) {
+                const { matches, players, id: historyId, name } = data;
+
+                if (!matchIdFromUrl && historyId) {
+                    const newUrl = `${window.location.pathname}?id=${historyId}`;
+                    window.history.replaceState({ path: newUrl }, '', newUrl);
+                }
+
+                function render() {
+                    if (!matches || !players) {
+                        console.error("对局或队员数据缺失，无法渲染页面。");
+                        return;
+                    }
+                    const pageTitle = name ? name : '对阵结果';
+                    
+                    root.innerHTML = `
+                    <div class="main-container">
+                        <div class="container">
+                            <h1>${pageTitle}</h1>
+                            <div class="top-actions">
+                                <button id="shuffle-btn">随机排序对局</button>
+                                <button id="save-history-btn">${data.timestamp ? '更新记录' : '保存对局记录'}</button>
+                                <a href="index.html">返回首页</a>
+                            </div>
+                            <div class="match-list" id="match-list">
+                                <!-- 内容将由 renderMatchList 动态填充 -->
+                            </div>
+                        </div>
+                        <div class="stats-panel">
+                            <h2>实时统计</h2>
+                            <h3>男子排名</h3>
+                            <table id="male-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
+                            <h3>女子排名</h3>
+                            <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
+                        </div>
+                    </div>`;
+                }
+
+                function renderMatchList() {
+                    const matchListEl = document.getElementById('match-list');
+                    if (!matchListEl) return;
+
+                    matchListEl.innerHTML = matches.map((match, index) => {
+                        const isSingles = match.team1.length === 1;
+                        const team1Text = isSingles ? match.team1[0] : match.team1.join(' & ');
+                        const team2Text = isSingles ? match.team2[0] : match.team2.join(' & ');
+                        const playersStr = [...match.team1, ...match.team2].join(',');
+                        return `
+                        <div class="match" id="match-${index}" data-players="${playersStr}">
+                            <div class="teams">
+                                <span class="team">${team1Text}</span>
+                                <span class="vs">VS</span>
+                                <span class="team">${team2Text}</span>
+                            </div>
+                            <div class="score-container">
+                                <div class="score-display"><span class="score-text">${(match.score && match.score.team1 != null) ? `${match.score.team1} : ${match.score.team2}` : '-- : --'}</span></div>
+                                <div class="score-input" style="display: none;">
+                                    <input type="number" class="score-team1" min="0" value="0"> : <input type="number" class="score-team2" min="0" value="0">
+                                </div>
+                                <div class="score-actions">
+                                    <button class="edit-score-btn">输入比分</button>
+                                    <button class="save-score-btn" style="display: none;">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    `}).join('');
+                }
+
+                function calculateAndDisplayStats() {
+                    const stats = {};
+                    if (!players) return;
+                    players.forEach(p => { stats[p.name] = { wins: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, gender: p.gender }; });
+
+                    if (!matches) return;
+                    matches.forEach((matchData, index) => {
+                        if (!matchData.score || matchData.score.team1 == null) return;
+
+                        const team1Players = matchData.team1;
+                        const team2Players = matchData.team2;
+                        const score1 = parseInt(matchData.score.team1, 10);
+                        const score2 = parseInt(matchData.score.team2, 10);
+
+                        if (isNaN(score1) || isNaN(score2)) return;
+
+                        team1Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score1; stats[p].scoreAgainst += score2; } });
+                        team2Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score2; stats[p].scoreAgainst += score1; } });
+
+                        if (score1 > score2) {
+                            team1Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                            team2Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                        } else if (score2 > score1) {
+                            team2Players.forEach(p => { if(stats[p]) stats[p].wins++; });
+                            team1Players.forEach(p => { if(stats[p]) stats[p].losses++; });
+                        }
+                    });
+
+                    const maleStats = [], femaleStats = [];
+                    for (const playerName in stats) {
+                        const pStat = stats[playerName];
+                        pStat.name = playerName;
+                        pStat.netScore = pStat.scoreFor - pStat.scoreAgainst;
+                        if (pStat.gender === 'M') maleStats.push(pStat); else femaleStats.push(pStat);
+                    }
+
+                    const sortFn = (a, b) => b.wins - a.wins || b.netScore - a.netScore;
+                    maleStats.sort(sortFn); femaleStats.sort(sortFn);
+
+                    const renderTable = (tbody, data) => {
+                        if (!tbody) return;
+                        tbody.innerHTML = data.map((p, index) => `<tr><td>${index + 1}</td><td>${p.name}</td><td>${p.wins}/${p.losses}</td><td>${p.netScore > 0 ? '+' : ''}${p.netScore}</td></tr>`).join('');
+                    };
+                    renderTable(document.querySelector('#male-rankings tbody'), maleStats);
+                    renderTable(document.querySelector('#female-rankings tbody'), femaleStats);
+                }
+
+                function attachEventListeners() {
+                    const saveBtn = document.getElementById('save-history-btn');
+                    const shuffleBtn = document.getElementById('shuffle-btn');
+                    const matchList = document.getElementById('match-list');
+
+                    if (!saveBtn || !shuffleBtn || !matchList) {
+                        console.error("一个或多个关键元素未找到，事件监听器无法附加。");
+                        return;
+                    }
+
+                    matchList.addEventListener('click', e => {
+                        const matchEl = e.target.closest('.match');
+                        if (!matchEl) return;
+                        const matchIndex = parseInt(matchEl.id.split('-')[1], 10);
+                        const matchData = matches[matchIndex];
+
+                        if (e.target.classList.contains('edit-score-btn')) {
+                            matchEl.querySelector('.score-display').style.display = 'none';
+                            matchEl.querySelector('.score-input').style.display = 'flex';
+                            e.target.style.display = 'none';
+                            matchEl.querySelector('.save-score-btn').style.display = 'inline-block';
+                            const score = matchData.score || { team1: 0, team2: 0 };
+                            matchEl.querySelector('.score-team1').value = score.team1 || 0;
+                            matchEl.querySelector('.score-team2').value = score.team2 || 0;
+                        } else if (e.target.classList.contains('save-score-btn')) {
+                            const score1 = parseInt(matchEl.querySelector('.score-team1').value, 10) || 0;
+                            const score2 = parseInt(matchEl.querySelector('.score-team2').value, 10) || 0;
+                            matchData.score = { team1: score1, team2: score2 };
+                            matchEl.querySelector('.score-text').textContent = `${score1} : ${score2}`;
+                            matchEl.querySelector('.score-display').style.display = 'block';
+                            matchEl.querySelector('.score-input').style.display = 'none';
+                            e.target.style.display = 'none';
+                            matchEl.querySelector('.edit-score-btn').style.display = 'inline-block';
+                            calculateAndDisplayStats();
+                        }
+                    });
+
+                    saveBtn.addEventListener('click', async () => {
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = '保存中...';
+
+                        const dataToSave = { ...data, matches };
+
+                        try {
+                            const response = await fetch(`${API_BASE_URL}/api/history`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(dataToSave)
+                            });
+
+                            if (response.ok) {
+                                alert('记录已成功保存到云端！');
+                                if (!data.timestamp) {
+                                    data.timestamp = new Date().toISOString();
+                                    sessionStorage.setItem('current_match_data', JSON.stringify(data));
+                                }
+                                saveBtn.textContent = '更新记录';
+                            } else {
+                                const err = await response.json();
+                                throw new Error(err.error || '保存失败');
+                            }
+                        } catch (error) {
+                            alert(`保存失败: ${error.message}`);
+                            saveBtn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
+                        } finally {
+                            saveBtn.disabled = false;
+                        }
+                    });
+
+                    shuffleBtn.addEventListener('click', () => {
+                        for (let i = matches.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [matches[i], matches[j]] = [matches[j], matches[i]];
+                        }
+                        // 只重新渲染对局列表，而不是整个页面
+                        renderMatchList();
+                    });
+                }
+
+                render();
+                renderMatchList(); // 初始渲染对局列表
+                calculateAndDisplayStats();
+                attachEventListeners();
+            }
         });
     </script>
 </body>

@@ -192,6 +192,7 @@ def generate():
     players = data.get('players', [])
     mode = data.get('mode')
     k = data.get('k')
+    name = data.get('name', '') # 获取对局名称
 
     if not all([players, mode, k]):
         return jsonify({'error': 'Missing parameters'}), 400
@@ -214,7 +215,8 @@ def generate():
             'mode': mode, 
             'k': k,
             'id': str(uuid.uuid4()), # 这是一个临时ID，用于前端标识
-            'timestamp': None # 时间戳将在保存时设置
+            'timestamp': None, # 时间戳将在保存时设置
+            'name': name # 添加对局名称
         }
         return jsonify(response_data)
     except ValueError as e:
@@ -248,12 +250,22 @@ def handle_history():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-@app.route('/api/history/<record_id>', methods=['DELETE'])
+@app.route('/api/history/<record_id>', methods=['GET', 'DELETE'])
 def handle_history_record(record_id):
-    try:
-        result = db.hdel('histories', record_id)
-        if result == 0:
-            return jsonify({'error': '记录未找到'}), 404
+    if request.method == 'GET':
+        try:
+            record_raw = db.hget('histories', record_id)
+            if not record_raw:
+                return jsonify({'error': '记录未找到'}), 404
+            return jsonify(json.loads(record_raw)), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if request.method == 'DELETE':
+        try:
+            result = db.hdel('histories', record_id)
+            if result == 0:
+                return jsonify({'error': '记录未找到'}), 404
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
