@@ -63,39 +63,65 @@ def generate_random_doubles(players, k):
     games_played = defaultdict(int)
     partnerships = defaultdict(lambda: defaultdict(int))
     matches = []
+    
+    all_possible_matches = list(combinations(players, 4))
+    
     while len(matches) < total_matches:
         available_players = [p for p in players if games_played[p['name']] < k]
-        if len(available_players) < 4: break
-        scored_pairs = []
-        for p1, p2 in combinations(available_players, 2):
-            score = partnerships[p1['name']][p2['name']]
-            scored_pairs.append(((p1, p2), score))
-        scored_pairs.sort(key=lambda x: x[1])
+        if len(available_players) < 4:
+            break
+
         best_match_found = None
-        lowest_total_score = float('inf')
-        for i in range(len(scored_pairs)):
-            pair1, score1 = scored_pairs[i]
-            if score1 >= lowest_total_score: continue
-            for j in range(i + 1, len(scored_pairs)):
-                pair2, score2 = scored_pairs[j]
-                p3, p4 = pair2
-                if pair1[0] not in pair2 and pair1[1] not in pair2:
-                    current_total_score = score1 + score2
-                    if current_total_score < lowest_total_score:
-                        lowest_total_score = current_total_score
-                        best_match_found = (pair1, pair2)
-                        if lowest_total_score == 0: break
-            if lowest_total_score == 0: break
+        lowest_partnership_score = float('inf')
+
+        # 尝试从所有可能的对局中找到一个最优的
+        random.shuffle(all_possible_matches)
+        
+        for p1, p2, p3, p4 in all_possible_matches:
+            # 确保所有玩家都在可用列表中
+            if all(p in available_players for p in [p1, p2, p3, p4]):
+                # 评估三种组合方式
+                # 1. (p1, p2) vs (p3, p4)
+                score1 = partnerships[p1['name']][p2['name']] + partnerships[p3['name']][p4['name']]
+                # 2. (p1, p3) vs (p2, p4)
+                score2 = partnerships[p1['name']][p3['name']] + partnerships[p2['name']][p4['name']]
+                # 3. (p1, p4) vs (p2, p3)
+                score3 = partnerships[p1['name']][p4['name']] + partnerships[p2['name']][p3['name']]
+
+                min_score = min(score1, score2, score3)
+
+                if min_score < lowest_partnership_score:
+                    lowest_partnership_score = min_score
+                    if min_score == score1:
+                        best_match_found = ([p1, p2], [p3, p4])
+                    elif min_score == score2:
+                        best_match_found = ([p1, p3], [p2, p4])
+                    else:
+                        best_match_found = ([p1, p4], [p2, p3])
+                
+                # 如果找到了一个从未有过的组合，就立即使用
+                if lowest_partnership_score == 0:
+                    break
+        
         if best_match_found:
-            (p1, p2), (p3, p4) = best_match_found
-            match = {'team1': [p1['name'], p2['name']], 'team2': [p3['name'], p4['name']]}
-            matches.append(match)
-            for p in [p1, p2, p3, p4]: games_played[p['name']] += 1
-            partnerships[p1['name']][p2['name']] += 1
-            partnerships[p2['name']][p1['name']] += 1
-            partnerships[p3['name']][p4['name']] += 1
-            partnerships[p4['name']][p3['name']] += 1
-        else: break
+            team1_players, team2_players = best_match_found
+            team1_names = [p['name'] for p in team1_players]
+            team2_names = [p['name'] for p in team2_players]
+            
+            matches.append({'team1': team1_names, 'team2': team2_names})
+            
+            # 更新统计数据
+            for p in team1_players + team2_players:
+                games_played[p['name']] += 1
+            
+            partnerships[team1_names[0]][team1_names[1]] += 1
+            partnerships[team1_names[1]][team1_names[0]] += 1
+            partnerships[team2_names[0]][team2_names[1]] += 1
+            partnerships[team2_names[1]][team2_names[0]] += 1
+        else:
+            # 如果没有找到合适的对局，则退出循环
+            break
+            
     return matches
 
 def generate_singles_robin(players, k):
