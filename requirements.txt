@@ -1,2 +1,3 @@
 Flask
 Flask-Cors
+redis==5.0.1

@@ -3,12 +3,21 @@ from collections import defaultdict
 from itertools import combinations
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import os
+import json
+import uuid
+import redis
 
 # Vercel 会将这个 'app' 变量作为应用实例
 app = Flask(__name__)
 CORS(app) # 允许所有来源的跨域请求
 
-# --- 核心算法 (与之前相同) ---
+# --- Redis 连接 ---
+# 优先从环境变量获取 REDIS_URL，如果不存在，则使用您提供的值作为后备
+redis_url = os.environ.get('REDIS_URL', "redis://default:2aTcH5uXHHgOlsC9FBZOQJdfbMnOnrSj@redis-16255.c292.ap-southeast-1-1.ec2.redns.redis-cloud.com:16255")
+db = redis.from_url(redis_url, decode_responses=True)
+
+# --- 核心算法 (保持不变) ---
 def get_possible_k(num_players, mode, num_males=0, num_females=0):
     options = []
     max_k = 20
@@ -186,9 +195,56 @@ def generate():
             matches = generate_singles_robin(players, k)
         else:
             matches = generate_random_doubles(players, k)
-        return jsonify({'matches': matches, 'players': players})
+        # 在生成对局时，为新记录准备一个临时的UUID，但不立即保存
+        response_data = {
+            'matches': matches, 
+            'players': players, 
+            'mode': mode, 
+            'k': k,
+            'id': str(uuid.uuid4()), # 这是一个临时ID，用于前端标识
+            'timestamp': None # 时间戳将在保存时设置
+        }
+        return jsonify(response_data)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+
+# --- 新增：历史记录 API ---
+@app.route('/api/history', methods=['GET', 'POST'])
+def handle_history():
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data or 'id' not in data:
+            return jsonify({'error': '无效的数据格式'}), 400
+        
+        record_id = data['id']
+        # 如果是新记录，设置时间戳
+        if not data.get('timestamp'):
+            data['timestamp'] = datetime.utcnow().isoformat()
+
+        try:
+            db.hset('histories', record_id, json.dumps(data))
+            return jsonify({'success': True, 'id': record_id}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if request.method == 'GET':
+        try:
+            all_histories_raw = db.hvals('histories')
+            all_histories = [json.loads(h) for h in all_histories_raw]
+            all_histories.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            return jsonify(all_histories), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history/<record_id>', methods=['DELETE'])
+def handle_history_record(record_id):
+    try:
+        result = db.hdel('histories', record_id)
+        if result == 0:
+            return jsonify({'error': '记录未找到'}), 404
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Vercel 会处理静态文件，这个根路由可以用于健康检查
 @app.route('/')

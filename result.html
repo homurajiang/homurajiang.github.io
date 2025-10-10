@@ -51,8 +51,7 @@
             }
 
             const data = JSON.parse(dataString);
-            const { matches, players, id: historyId } = data;
-            const DB_HISTORY_KEY = 'badminton_history';
+            const { matches, players, id: historyId, mode, k } = data;
 
             function render() {
                 root.innerHTML = `
@@ -61,8 +60,8 @@
                         <h1>对阵结果</h1>
                         <div class="top-actions">
                             <button id="shuffle-btn">随机排序对局</button>
-                            <button id="save-history-btn">${historyId ? '更新记录' : '保存对局记录'}</button>
-                            <a href="index.html" id="back-to-home">返回首页</a>
+                            <button id="save-history-btn">${data.timestamp ? '更新记录' : '保存对局记录'}</button>
+                            <a href="index.html">返回首页</a>
                         </div>
                         <div class="match-list" id="match-list">
                             ${matches.map((match, index) => {
@@ -184,23 +183,35 @@
                     }
                 });
 
-                document.getElementById('save-history-btn').addEventListener('click', () => {
-                    const history = JSON.parse(localStorage.getItem(DB_HISTORY_KEY) || '[]');
-                    const newId = historyId || crypto.randomUUID();
-                    const newEntry = { id: newId, timestamp: new Date().toISOString(), players, matches };
-                    
-                    const existingIndex = history.findIndex(item => item.id === historyId);
-                    if (existingIndex > -1) {
-                        history[existingIndex] = newEntry;
-                    } else {
-                        history.push(newEntry);
-                    }
-                    localStorage.setItem(DB_HISTORY_KEY, JSON.stringify(history));
-                    alert('记录已保存！');
-                    if (!historyId) {
-                        // Redirect to the same page but with the history id in session, to change button text
-                        sessionStorage.setItem('current_match_data', JSON.stringify(newEntry));
-                        window.location.reload();
+                document.getElementById('save-history-btn').addEventListener('click', async () => {
+                    const btn = document.getElementById('save-history-btn');
+                    btn.disabled = true;
+                    btn.textContent = '保存中...';
+
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/history`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data) // data 包含 id, matches, players 等
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            alert('记录已成功保存到云端！');
+                            if (!data.timestamp) { // 如果是第一次保存
+                                data.timestamp = new Date().toISOString(); // 模拟时间戳，以便按钮文本更新
+                                sessionStorage.setItem('current_match_data', JSON.stringify(data));
+                            }
+                            btn.textContent = '更新记录';
+                        } else {
+                            const err = await response.json();
+                            throw new Error(err.error || '保存失败');
+                        }
+                    } catch (error) {
+                        alert(`保存失败: ${error.message}`);
+                        btn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
+                    } finally {
+                        btn.disabled = false;
                     }
                 });
 

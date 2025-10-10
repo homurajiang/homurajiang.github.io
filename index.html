@@ -23,9 +23,11 @@
         label { margin-right: 15px; }
         .history-section { margin-top: 3em; }
         #history-list { list-style: none; padding: 0; }
-        #history-list li { background-color: #f0f0f0; margin-bottom: 8px; border-radius: 5px; transition: background-color 0.2s; }
-        #history-list li a { display: block; padding: 12px 15px; text-decoration: none; color: var(--font-color); cursor: pointer; }
+        #history-list li { background-color: #f0f0f0; margin-bottom: 8px; border-radius: 5px; transition: background-color 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        #history-list li a { display: block; padding: 12px 15px; text-decoration: none; color: var(--font-color); cursor: pointer; flex-grow: 1; }
         #history-list li:hover { background-color: #e0e0e0; }
+        .delete-history-btn { background-color: #dc3545; color: white; border: none; padding: 5px 10px; margin-right: 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .delete-history-btn:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
@@ -72,7 +74,7 @@
         const historyList = document.getElementById('history-list');
         let playerCount = 0;
 
-        const DB_KEYS = { PLAYERS: 'badminton_players', HISTORY: 'badminton_history' };
+        const DB_KEYS = { PLAYERS: 'badminton_players' }; // 历史记录不再使用localStorage
 
         function savePlayers() {
             localStorage.setItem(DB_KEYS.PLAYERS, JSON.stringify(getPlayersData()));
@@ -152,28 +154,60 @@
             }
         }
 
-        function loadHistory() {
-            const history = JSON.parse(localStorage.getItem(DB_KEYS.HISTORY) || '[]');
-            history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            historyList.innerHTML = '';
-            if (history.length === 0) {
-                historyList.innerHTML = '<li>暂无历史记录</li>';
-                return;
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/history`);
+                if (!response.ok) throw new Error('获取历史记录失败');
+                const history = await response.json();
+                
+                historyList.innerHTML = '';
+                if (history.length === 0) {
+                    historyList.innerHTML = '<li>暂无云端历史记录</li>';
+                    return;
+                }
+                history.forEach(item => {
+                    const title = `${new Date(item.timestamp).toLocaleString()} - ${item.players.length}人局`;
+                    historyList.innerHTML += `
+                        <li>
+                            <a data-history-id="${item.id}">${title}</a>
+                            <button class="delete-history-btn" data-history-id="${item.id}">删除</button>
+                        </li>`;
+                });
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+                historyList.innerHTML = '<li>加载历史记录失败</li>';
             }
-            history.forEach(item => {
-                const title = `${new Date(item.timestamp).toLocaleString()} - ${item.players.length}人局`;
-                historyList.innerHTML += `<li><a data-history-id="${item.id}">${title}</a></li>`;
-            });
         }
 
-        historyList.addEventListener('click', e => {
+        historyList.addEventListener('click', async e => {
+            const historyId = e.target.dataset.historyId;
+            if (!historyId) return;
+
             if (e.target.tagName === 'A') {
-                const historyId = e.target.dataset.historyId;
-                const history = JSON.parse(localStorage.getItem(DB_KEYS.HISTORY) || '[]');
-                const data = history.find(item => item.id === historyId);
-                if (data) {
-                    sessionStorage.setItem('current_match_data', JSON.stringify(data));
-                    window.location.href = 'result.html';
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/history`);
+                    const history = await response.json();
+                    const data = history.find(item => item.id === historyId);
+                    if (data) {
+                        sessionStorage.setItem('current_match_data', JSON.stringify(data));
+                        window.location.href = 'result.html';
+                    }
+                } catch (error) {
+                    alert('加载对局详情失败');
+                }
+            } else if (e.target.classList.contains('delete-history-btn')) {
+                if (confirm('确定要删除这条记录吗？此操作不可恢复。')) {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/history/${historyId}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            loadHistory(); // 重新加载列表
+                        } else {
+                            const err = await response.json();
+                            throw new Error(err.error || '删除失败');
+                        }
+                    } catch (error) {
+                        alert(`删除失败: ${error.message}`);
+                    }
                 }
             }
         });
