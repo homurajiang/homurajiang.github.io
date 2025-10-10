@@ -77,7 +77,6 @@
             function initializeApp(data) {
                 const { matches, players, id: historyId, name } = data;
 
-                // 如果 URL 中没有 ID，则更新 URL，实现分享功能
                 if (!matchIdFromUrl && historyId) {
                     const newUrl = `${window.location.pathname}?id=${historyId}`;
                     window.history.replaceState({ path: newUrl }, '', newUrl);
@@ -113,10 +112,12 @@
                         </div>
                     </div>`;
 
-                    // 在主框架渲染完成后，再执行依赖于 DOM 的操作
-                    renderMatchList();
-                    calculateAndDisplayStats();
-                    attachEventListeners();
+                    // **修复关键**：延迟执行依赖于新 DOM 的函数
+                    setTimeout(() => {
+                        renderMatchList();
+                        calculateAndDisplayStats();
+                        attachEventListeners();
+                    }, 0);
                 }
 
                 function renderMatchList() {
