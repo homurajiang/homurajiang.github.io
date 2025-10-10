@@ -40,6 +40,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // 使用相对路径，自动适应 Vercel 部署和本地测试环境
+            const API_BASE_URL = '';
             const root = document.getElementById('root');
             const dataString = sessionStorage.getItem('current_match_data');
 
