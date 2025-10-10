@@ -104,8 +104,6 @@
                         <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
                     </div>
                 </div>`;
-                attachEventListeners();
-                calculateAndDisplayStats();
             }
 
             function calculateAndDisplayStats() {
@@ -154,22 +152,16 @@
             }
 
             function attachEventListeners() {
-                // 添加返回首页前的保存逻辑
-                document.getElementById('back-to-home').addEventListener('click', function(e) {
-                    e.preventDefault();
-                    // 确保首页能获取到最新数据
-                    sessionStorage.setItem('temp_players_data', JSON.stringify(players));
-                    window.location.href = this.href;
-                });
-
-                // 确保核心元素存在再附加事件
                 const saveBtn = document.getElementById('save-history-btn');
-                if (!saveBtn) {
-                    console.error('Save button not found, event listeners not attached.');
+                const shuffleBtn = document.getElementById('shuffle-btn');
+                const matchList = document.getElementById('match-list');
+
+                if (!saveBtn || !shuffleBtn || !matchList) {
+                    console.error("一个或多个关键元素未找到，事件监听器无法附加。");
                     return;
                 }
 
-                document.getElementById('match-list').addEventListener('click', e => {
+                matchList.addEventListener('click', e => {
                     const matchEl = e.target.closest('.match');
                     if (!matchEl) return;
                     const matchIndex = parseInt(matchEl.id.split('-')[1], 10);
@@ -197,15 +189,11 @@
                 });
 
                 saveBtn.addEventListener('click', async () => {
-                    const btn = document.getElementById('save-history-btn');
-                    btn.disabled = true;
-                    btn.textContent = '保存中...';
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = '保存中...';
 
                     // 确保发送到后端的数据是最新的
-                    const dataToSave = {
-                        ...data,
-                        matches: matches // 确保包含最新的比分
-                    };
+                    const dataToSave = { ...data, matches };
 
                     try {
                         const response = await fetch(`${API_BASE_URL}/api/history`, {
@@ -215,38 +203,40 @@
                         });
 
                         if (response.ok) {
-                            const result = await response.json();
                             alert('记录已成功保存到云端！');
-                            // 如果是第一次保存，更新前端状态
                             if (!data.timestamp) {
                                 data.timestamp = new Date().toISOString();
                                 sessionStorage.setItem('current_match_data', JSON.stringify(data));
                             }
-                            btn.textContent = '更新记录';
+                            saveBtn.textContent = '更新记录';
                         } else {
                             const err = await response.json();
                             throw new Error(err.error || '保存失败');
                         }
                     } catch (error) {
                         alert(`保存失败: ${error.message}`);
-                        btn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
+                        saveBtn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
                     } finally {
-                        btn.disabled = false;
+                        saveBtn.disabled = false;
                     }
                 });
 
-                document.getElementById('shuffle-btn').addEventListener('click', () => {
-                    // This shuffle logic now needs to re-render the list
-                    // For simplicity, we'll just shuffle the `matches` array and re-render
+                shuffleBtn.addEventListener('click', () => {
                     for (let i = matches.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
                         [matches[i], matches[j]] = [matches[j], matches[i]];
                     }
-                    render(); // Re-render the whole component
+                    render(); // 重新渲染整个页面
+                    // 注意：重新渲染后，旧的事件监听器会丢失，但因为我们是在同一个页面生命周期内，
+                    // 并且没有重新加载页面，所以这里的事件监听器仍然有效。
+                    // 如果 render() 导致页面完全重载，则需要重新附加监听器。
                 });
             }
 
+            // 确保在 DOM 渲染后执行所有操作
             render();
+            calculateAndDisplayStats();
+            attachEventListeners();
         });
     </script>
 </body>

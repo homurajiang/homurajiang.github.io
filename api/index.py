@@ -13,15 +13,23 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app) # 允许所有来源的跨域请求
 
-# --- Redis 连接 ---
-# 使用您提供的正确环境变量名
+# --- Redis 连接 (Python 版本) ---
+# 从 Vercel 环境变量获取 Redis 连接信息
 redis_url = os.environ.get('homurajiang_badminton_REDIS_URL')
 if not redis_url:
-    # 如果在 Vercel 环境中未设置此变量，则抛出错误
-    raise ValueError("环境变量 homurajiang_badminton_REDIS_URL 未设置。")
-db = redis.from_url(redis_url, decode_responses=True)
+    raise ValueError("Redis URL 环境变量未设置，请在 Vercel 控制台配置")
 
-# --- 核心算法 (保持不变) ---
+# 初始化 Redis 客户端
+try:
+    db = redis.from_url(redis_url, decode_responses=True)
+    # 测试连接
+    db.ping()
+    app.logger.info("Redis 连接成功")
+except Exception as e:
+    app.logger.error(f"Redis 连接失败: {str(e)}")
+    raise
+
+# --- 核心算法代码保持不变 ---
 def get_possible_k(num_players, mode, num_males=0, num_females=0):
     options = []
     max_k = 20
@@ -254,3 +262,36 @@ def handle_history_record(record_id):
 @app.route('/')
 def home():
     return "Backend is running."
+
+
+@app.route('/api/history', methods=['POST'])
+def save_history():
+    data = request.get_json()
+    if not data or 'id' not in data:
+        return jsonify({'error': '无效的数据格式'}), 400
+    
+    record_id = data['id']
+    # 确保时间戳存在
+    if not data.get('timestamp'):
+        data['timestamp'] = datetime.utcnow().isoformat()
+    
+    try:
+        # 保存到 Redis (使用哈希表存储所有历史记录)
+        db.hset('match_history', record_id, json.dumps(data))
+        return jsonify({'success': True, 'record_id': record_id}), 200
+    except Exception as e:
+        app.logger.error(f"保存历史记录失败: {str(e)}")
+        return jsonify({'error': f'保存失败: {str(e)}'}), 500
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    try:
+        # 从 Redis 获取所有历史记录
+        all_records = db.hvals('match_history')
+        history = [json.loads(record) for record in all_records]
+        # 按时间戳排序
+        history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        return jsonify(history), 200
+    except Exception as e:
+        app.logger.error(f"获取历史记录失败: {str(e)}")
+        return jsonify({'error': f'获取记录失败: {str(e)}'}), 500
