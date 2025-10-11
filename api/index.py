@@ -233,7 +233,7 @@ def generate():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
-# --- 历史记录 API (带错误处理) ---
+# --- 历史记录 API (使用新的 ID 列表逻辑) ---
 @app.route('/api/history', methods=['GET', 'POST'])
 def handle_history():
     if db is None:
@@ -249,7 +249,14 @@ def handle_history():
             data['timestamp'] = datetime.utcnow().isoformat()
 
         try:
-            db.hset('histories', record_id, json.dumps(data))
+            # 使用 pipeline 保证原子性
+            pipe = db.pipeline()
+            # 1. 存入哈希表
+            pipe.hset('histories', record_id, json.dumps(data))
+            # 2. 将 ID 添加到新的 Set 中
+            pipe.sadd('match_history_ids', record_id)
+            pipe.execute()
+            
             return jsonify({'success': True, 'id': record_id}), 200
         except Exception as e:
             app.logger.error(f"保存历史记录失败 (ID: {record_id}): {e}")
@@ -257,9 +264,18 @@ def handle_history():
 
     if request.method == 'GET':
         try:
-            all_histories_raw = db.hvals('histories')
-            all_histories = [json.loads(h) for h in all_histories_raw]
+            # 1. 从 Set 中获取所有 ID
+            history_ids = db.smembers('match_history_ids')
+            if not history_ids:
+                return jsonify([]), 200
+            
+            # 2. 一次性获取所有记录
+            all_histories_raw = db.hmget('histories', list(history_ids))
+            
+            # 3. 清理和排序
+            all_histories = [json.loads(h) for h in all_histories_raw if h]
             all_histories.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
             return jsonify(all_histories), 200
         except Exception as e:
             app.logger.error(f"获取全部历史记录失败: {e}")
@@ -282,9 +298,18 @@ def handle_history_record(record_id):
 
     if request.method == 'DELETE':
         try:
-            result = db.hdel('histories', record_id)
-            if result == 0:
+            # 使用 pipeline 保证原子性
+            pipe = db.pipeline()
+            # 1. 从哈希表中删除
+            pipe.hdel('histories', record_id)
+            # 2. 从 Set 中删除 ID
+            pipe.srem('match_history_ids', record_id)
+            results = pipe.execute()
+            
+            # 检查 hdel 的结果
+            if results[0] == 0:
                 return jsonify({'error': '记录未找到'}), 404
+                
             return jsonify({'success': True}), 200
         except Exception as e:
             app.logger.error(f"删除历史记录失败 (ID: {record_id}): {e}")
