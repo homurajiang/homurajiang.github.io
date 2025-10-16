@@ -159,30 +159,107 @@ def generate_mixed_doubles(players, k):
     num_males, num_females = len(males), len(females)
     if num_males < 2 or num_females < 2:
         raise ValueError("男女队员人数必须都至少为2人才能进行混双比赛。")
-    total_matches = (num_males * k) // 2
+    
+    # 计算理论上的总比赛数 - 基于最小可能的总比赛数
+    total_matches = min((num_males * k) // 2, (num_females * k) // 2)
     games_played = defaultdict(int)
     partnerships = defaultdict(lambda: defaultdict(int))
     matches = []
-    max_attempts = total_matches * 5
-    while len(matches) < total_matches and max_attempts > 0:
-        max_attempts -= 1
-        eligible_males = sorted([p for p in males if games_played[p['name']] < k], key=lambda p: games_played[p['name']])
-        eligible_females = sorted([p for p in females if games_played[p['name']] < k], key=lambda p: games_played[p['name']])
-        if len(eligible_males) < 2 or len(eligible_females) < 2: break
-        m1, m2 = random.sample(eligible_males, 2)
-        f1, f2 = random.sample(eligible_females, 2)
-        score1 = partnerships[m1['name']][f1['name']] + partnerships[m2['name']][f2['name']]
-        score2 = partnerships[m1['name']][f2['name']] + partnerships[m2['name']][f1['name']]
-        if score1 <= score2:
-            match = {'team1': [m1['name'], f1['name']], 'team2': [m2['name'], f2['name']]}
-            partnerships[m1['name']][f1['name']] += 1; partnerships[f1['name']][m1['name']] += 1
-            partnerships[m2['name']][f2['name']] += 1; partnerships[f2['name']][m2['name']] += 1
-        else:
-            match = {'team1': [m1['name'], f2['name']], 'team2': [m2['name'], f1['name']]}
-            partnerships[m1['name']][f2['name']] += 1; partnerships[f2['name']][m1['name']] += 1
-            partnerships[m2['name']][f1['name']] += 1; partnerships[f1['name']][m2['name']] += 1
-        matches.append(match)
-        for p in [m1, m2, f1, f2]: games_played[p['name']] += 1
+    
+    # 增加尝试次数，确保有足够的机会找到合适的配对
+    max_attempts = total_matches * 10
+    attempts = 0
+    
+    # 跟踪已完成k场比赛的玩家数量
+    completed_males = 0
+    completed_females = 0
+    
+    while len(matches) < total_matches and attempts < max_attempts and (completed_males < num_males or completed_females < num_females):
+        attempts += 1
+        
+        # 优先选择比赛次数最少的玩家
+        eligible_males = sorted([p for p in males if games_played[p['name']] < k], 
+                               key=lambda p: games_played[p['name']])
+        eligible_females = sorted([p for p in females if games_played[p['name']] < k], 
+                                 key=lambda p: games_played[p['name']])
+        
+        # 更新已完成k场比赛的玩家数量
+        completed_males = sum(1 for p in males if games_played[p['name']] >= k)
+        completed_females = sum(1 for p in females if games_played[p['name']] >= k)
+        
+        # 确保至少有2男2女可以继续比赛
+        if len(eligible_males) < 2 or len(eligible_females) < 2:
+            # 尝试从已接近完成k场的玩家中选择
+            if len(eligible_males) < 2:
+                # 寻找只有1场未完成的男性玩家
+                additional_males = [p for p in males if games_played[p['name']] == k-1]
+                eligible_males.extend(additional_males)
+            if len(eligible_females) < 2:
+                # 寻找只有1场未完成的女性玩家
+                additional_females = [p for p in females if games_played[p['name']] == k-1]
+                eligible_females.extend(additional_females)
+            
+            # 如果仍然不足，则跳过这次尝试
+            if len(eligible_males) < 2 or len(eligible_females) < 2:
+                continue
+        
+        # 从比赛次数少的玩家中优先选择
+        # 至少确保选到前一半比赛次数少的玩家
+        m_candidates = eligible_males[:max(2, len(eligible_males)//2)]
+        f_candidates = eligible_females[:max(2, len(eligible_females)//2)]
+        
+        # 尝试多次随机选择，以找到最优配对
+        best_match = None
+        best_score = float('inf')
+        pairing_attempts = 5  # 尝试多次配对以找到更好的组合
+        
+        for _ in range(pairing_attempts):
+            if len(m_candidates) < 2 or len(f_candidates) < 2:
+                continue
+            
+            # 随机选择2男2女
+            m_sample = random.sample(m_candidates, 2) if len(m_candidates) >= 2 else m_candidates[:2]
+            f_sample = random.sample(f_candidates, 2) if len(f_candidates) >= 2 else f_candidates[:2]
+            
+            m1, m2 = m_sample
+            f1, f2 = f_sample
+            
+            # 计算两种配对方式的分数
+            score1 = partnerships[m1['name']][f1['name']] + partnerships[m2['name']][f2['name']]
+            score2 = partnerships[m1['name']][f2['name']] + partnerships[m2['name']][f1['name']]
+            
+            if score1 <= score2:
+                current_match = ({'team1': [m1['name'], f1['name']], 'team2': [m2['name'], f2['name']]}, 
+                               score1, m1, m2, f1, f2, 1)
+            else:
+                current_match = ({'team1': [m1['name'], f2['name']], 'team2': [m2['name'], f1['name']]}, 
+                               score2, m1, m2, f1, f2, 2)
+            
+            if current_match[1] < best_score:
+                best_score = current_match[1]
+                best_match = current_match
+        
+        if best_match:
+            match_data, score, m1, m2, f1, f2, pairing_type = best_match
+            
+            # 更新统计数据
+            for p in [m1, m2, f1, f2]:
+                games_played[p['name']] += 1
+                
+            # 更新搭档统计
+            if pairing_type == 1:
+                partnerships[m1['name']][f1['name']] += 1
+                partnerships[f1['name']][m1['name']] += 1
+                partnerships[m2['name']][f2['name']] += 1
+                partnerships[f2['name']][m2['name']] += 1
+            else:
+                partnerships[m1['name']][f2['name']] += 1
+                partnerships[f2['name']][m1['name']] += 1
+                partnerships[m2['name']][f1['name']] += 1
+                partnerships[f1['name']][m2['name']] += 1
+            
+            matches.append(match_data)
+            
     return matches
 
 # --- API Endpoints ---
