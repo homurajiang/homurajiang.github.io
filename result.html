@@ -5,328 +5,628 @@
     <title>对阵结果</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        :root { --primary-color: #007bff; --secondary-color: #6c757d; --bg-color: #f8f9fa; --font-color: #333; --border-color: #dee2e6; --card-bg: #fff; --success-color: #28a745; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; background-color: var(--bg-color); color: var(--font-color); }
-        .main-container { display: flex; gap: 2em; max-width: 1200px; margin: 2em auto; padding: 0 2em; align-items: flex-start; }
-        .container { flex: 3; }
-        .stats-panel { flex: 1; position: sticky; top: 2em; background-color: var(--card-bg); padding: 1.5em; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1, h2, h3 { text-align: center; }
-        h1 { color: var(--primary-color); }
-        .top-actions { display: flex; justify-content: center; gap: 1em; margin-bottom: 2em; }
-        .top-actions button, .top-actions a { cursor: pointer; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; font-weight: 500; text-decoration: none; color: white; background-color: var(--primary-color); }
-        #save-history-btn { background-color: var(--success-color); }
-        .top-actions a { background-color: var(--secondary-color); }
-        .match-list { display: flex; flex-direction: column; gap: 15px; }
-        .match { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .teams { flex-grow: 1; text-align: center; }
-        .team { font-size: 1.1em; }
-        .vs { font-weight: bold; margin: 0 15px; color: var(--primary-color); }
-        .score-container { display: flex; align-items: center; gap: 10px; }
-        .score-display, .score-input { font-size: 1.1em; font-weight: bold; }
-        .score-input input { width: 40px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; }
-        .score-actions button { padding: 5px 10px; border: 1px solid var(--border-color); background-color: #f0f0f0; border-radius: 4px; cursor: pointer; }
-        .save-score-btn { border-color: var(--success-color); color: var(--success-color); }
-        .error { color: red; text-align: center; font-size: 1.2em; }
-        .stats-panel h2, .stats-panel h3 { margin-top: 0; margin-bottom: 0.5em; }
-        .stats-panel h3 { margin-top: 1em; color: var(--secondary-color); font-size: 1.1em; }
-        .stats-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        .stats-panel th, .stats-panel td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-color); }
-        .stats-panel th { background-color: #f2f2f2; }
-        .stats-panel td:first-child, .stats-panel td:last-child { text-align: center; }
-        .loader { border: 8px solid #f3f3f3; border-top: 8px solid var(--primary-color); border-radius: 50%; width: 60px; height: 60px; animation: spin 1.5s linear infinite; margin: 50px auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+            --shadow-lg: 0 4px 6px rgba(0,0,0,.07), 0 12px 28px rgba(0,0,0,.08);
+            --transition: .25s cubic-bezier(.4,0,.2,1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #fdf2f8 100%);
+            color: var(--gray-800);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .page-container {
+            display: flex;
+            gap: 1.5rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            align-items: flex-start;
+        }
+        .main-panel { flex: 3; min-width: 0; }
+        .stats-panel {
+            flex: 1;
+            min-width: 240px;
+            position: sticky;
+            top: 1.5rem;
+            animation: fadeUp .5s ease-out .2s both;
+        }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes cardEnter { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes cardExit { to { opacity: 0; transform: scale(.95); } }
+        @keyframes pulse { 0%, 100% { box-shadow: var(--shadow); } 50% { box-shadow: 0 0 0 4px rgba(16,185,129,.2), var(--shadow); } }
+
+        .header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            animation: fadeUp .5s ease-out;
+        }
+        .header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header p {
+            color: var(--gray-500);
+            margin-top: .3rem;
+            font-size: .9rem;
+        }
+
+        .card {
+            background: rgba(255,255,255,.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.6);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.25rem;
+            transition: box-shadow var(--transition);
+        }
+        .card:hover { box-shadow: var(--shadow-lg); }
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+        .card-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.1em;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        /* ── Top Actions ──────────────── */
+        .top-actions {
+            display: flex;
+            justify-content: center;
+            gap: .5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            animation: fadeUp .5s ease-out .1s both;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .4rem;
+            padding: .55rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: .85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+        }
+        .btn:active { transform: scale(.97); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(99,102,241,.25);
+        }
+        .btn-primary:hover { box-shadow: 0 4px 14px rgba(99,102,241,.35); transform: translateY(-1px); }
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(16,185,129,.25);
+        }
+        .btn-success:hover { box-shadow: 0 4px 14px rgba(16,185,129,.35); transform: translateY(-1px); }
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+        .btn-secondary:hover { background: var(--gray-200); }
+        .btn-accent {
+            background: linear-gradient(135deg, var(--accent), #d97706);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(245,158,11,.25);
+        }
+        .btn-accent:hover { box-shadow: 0 4px 14px rgba(245,158,11,.35); transform: translateY(-1px); }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Info Banner ─────────────── */
+        .info-banner {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: var(--radius-sm);
+            padding: .6rem 1rem;
+            margin-bottom: 1rem;
+            font-size: .85rem;
+            color: #92400e;
+            animation: fadeIn .4s ease-out;
+            line-height: 1.5;
+        }
+
+        /* ── Match List ───────────────── */
+        .match-list { display: flex; flex-direction: column; gap: .75rem; }
+
+        .match-card {
+            background: rgba(255,255,255,.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.6);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all var(--transition);
+            animation: cardEnter .4s ease-out both;
+        }
+        .match-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+        .match-card.exiting { animation: cardExit .25s ease-in forwards; }
+        .match-card.saved { animation: pulse .6s ease; }
+        .match-card.relaxed-match { border-left: 3px solid var(--accent); }
+
+        .match-index {
+            font-size: .8rem;
+            font-weight: 700;
+            color: var(--gray-400);
+            min-width: 2rem;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .match-index span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--gray-100);
+        }
+
+        .match-teams {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .75rem;
+            font-size: .95rem;
+            min-width: 0;
+        }
+        .team-name {
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .vs-badge {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: .8rem;
+            flex-shrink: 0;
+            padding: .15rem .5rem;
+            background: #eef2ff;
+            border-radius: 4px;
+        }
+        .relaxed-badge {
+            font-size: .7rem;
+            background: #fffbeb;
+            color: #b45309;
+            padding: .15rem .45rem;
+            border-radius: 4px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .score-area {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-shrink: 0;
+        }
+        .score-display {
+            font-weight: 600;
+            font-size: .95rem;
+            color: var(--gray-600);
+            min-width: 60px;
+            text-align: center;
+        }
+        .score-input { display: none; align-items: center; gap: 4px; }
+        .score-input input {
+            width: 42px;
+            text-align: center;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            padding: .35rem;
+            font-size: .9rem;
+            font-weight: 600;
+            outline: none;
+            transition: border-color var(--transition);
+        }
+        .score-input input:focus { border-color: var(--primary-light); }
+        .score-input .sep { font-weight: 700; color: var(--gray-400); }
+
+        .btn-score {
+            padding: .3rem .6rem;
+            font-size: .78rem;
+            border: 1px solid var(--gray-200);
+            background: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all var(--transition);
+            font-weight: 500;
+            color: var(--gray-500);
+        }
+        .btn-score:hover { background: var(--gray-50); border-color: var(--gray-300); }
+        .btn-score.save { color: var(--success); border-color: #a7f3d0; }
+        .btn-score.save:hover { background: #ecfdf5; }
+
+        /* ── Stats Panel ──────────────── */
+        .stats-section { margin-bottom: 1.25rem; }
+        .stats-section:last-child { margin-bottom: 0; }
+        .stats-section h3 {
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            margin-bottom: .5rem;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .stats-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        .stats-table th {
+            text-align: left;
+            padding: .45rem .5rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            font-size: .75rem;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+        .stats-table td {
+            padding: .45rem .5rem;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .stats-table tr:last-child td { border-bottom: none; }
+        .stats-table td:first-child { font-weight: 600; color: var(--gray-400); text-align: center; width: 30px; }
+        .stats-table td:last-child { text-align: right; font-weight: 600; }
+        .stats-table .positive { color: var(--success); }
+        .stats-table .negative { color: var(--danger); }
+
+        .game-count-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        .game-count-table th {
+            text-align: left;
+            padding: .4rem .5rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            font-size: .75rem;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+        .game-count-table td { padding: .35rem .5rem; border-bottom: 1px solid var(--gray-100); }
+        .game-count-table tr:last-child td { border-bottom: none; }
+
+        /* ── Toast ────────────────────── */
+        .toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
+        .toast { padding: .75rem 1.25rem; border-radius: var(--radius-sm); font-size: .9rem; font-weight: 500; color: #fff; box-shadow: var(--shadow-lg); animation: toastIn .3s ease-out; cursor: pointer; }
+        .toast.error { background: var(--danger); }
+        .toast.success { background: var(--success); }
+        .toast.info { background: var(--primary); }
+        .toast.removing { animation: toastOut .25s ease-in forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { to { opacity: 0; transform: translateX(40px); } }
+
+        /* ── Error Page ───────────────── */
+        .error-page { max-width: 500px; margin: 0 auto; text-align: center; }
+        .error-page h1 { margin-bottom: 1rem; }
+        .error-page p { color: var(--danger); font-size: 1.1rem; margin-bottom: 1.5rem; }
+
+        @media (max-width: 768px) {
+            .page-container { flex-direction: column; }
+            .stats-panel { position: static; width: 100%; }
+            .match-card { flex-wrap: wrap; }
+            .match-teams { flex-wrap: wrap; justify-content: center; }
+            body { padding: 1rem .5rem; }
+        }
     </style>
 </head>
 <body>
+    <div class="toast-container" id="toast-container"></div>
     <div id="root"></div>
 
+    <script src="js/matching.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const API_BASE_URL = 'https://homurajiang-github-io.vercel.app';
-            const root = document.getElementById('root');
-            const urlParams = new URLSearchParams(window.location.search);
-            const matchIdFromUrl = urlParams.get('id');
+    document.addEventListener('DOMContentLoaded', () => {
+        const root = document.getElementById('root');
+        const dataString = sessionStorage.getItem('current_match_data');
 
-            if (matchIdFromUrl) {
-                loadDataFromBackend(matchIdFromUrl);
-            } else {
-                loadDataFromSession();
-            }
+        if (!dataString) {
+            root.innerHTML = `<div class="error-page card" style="margin-top:3rem;">
+                <h1 style="background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">数据丢失</h1>
+                <p>没有找到对局数据，请返回首页重新生成。</p>
+                <a href="index.html" class="btn btn-primary">返回首页</a>
+            </div>`;
+            return;
+        }
 
-            async function loadDataFromBackend(id) {
-                // 1. 立即显示加载动画
-                root.innerHTML = `<div class="container"><div class="loader"></div><p style="text-align:center; color: var(--secondary-color);">正在从云端加载对局数据...</p></div>`;
+        const data = JSON.parse(dataString);
+        let { matches, players, params, id: historyId, name: matchName } = data;
+        const DB_HISTORY_KEY = 'badminton_history';
 
-                // 2. 实现带超时的 fetch
-                const controller = new AbortController();
-                const signal = controller.signal;
-                const fetchTimeout = 30000; // 30秒超时
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            toast.addEventListener('click', () => { toast.classList.add('removing'); toast.addEventListener('animationend', () => toast.remove()); });
+            setTimeout(() => { if (toast.parentElement) { toast.classList.add('removing'); toast.addEventListener('animationend', () => toast.remove()); } }, 3000);
+        }
 
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => {
-                        controller.abort();
-                        reject(new Error('请求超时'));
-                    }, fetchTimeout)
-                );
+        function render() {
+            const hasRelaxed = matches.some(m => m.type === 'relaxed');
+            const isSingles = params && params.mode === 'singles_robin';
+            const pageTitle = matchName || '对阵结果';
 
-                try {
-                    const fetchPromise = fetch(`${API_BASE_URL}/api/history/${id}`, { signal });
-                    const response = await Promise.race([fetchPromise, timeoutPromise]);
+            root.innerHTML = `
+            <div class="page-container">
+                <div class="main-panel">
+                    <div class="header">
+                        <h1>${pageTitle}</h1>
+                        ${matchName ? `<p>${matches.length} 场对局 · ${players.length} 位选手</p>` : ''}
+                    </div>
+                    <div class="top-actions">
+                        ${params ? `<button class="btn btn-accent" id="refresh-btn">\u21BB 重新生成</button>` : ''}
+                        <button class="btn btn-primary" id="shuffle-btn">\u2195 随机排序</button>
+                        <button class="btn btn-success" id="save-btn">${historyId ? '更新记录' : '保存记录'}</button>
+                        <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                    </div>
+                    ${hasRelaxed ? `<div class="info-banner">由于男女人数不等，部分对局采用放松配对（标有"非标准混双"标记），确保每人对局数一致。不会出现男双 vs 女双的情况。</div>` : ''}
+                    <div class="match-list" id="match-list">
+                        ${matches.map((match, i) => renderMatchCard(match, i, isSingles)).join('')}
+                    </div>
+                </div>
+                <div class="stats-panel card">
+                    <div class="card-title">统计面板</div>
+                    <div class="stats-section">
+                        <h3>对局分布</h3>
+                        <table class="game-count-table">
+                            <thead><tr><th>队员</th><th>对局数</th></tr></thead>
+                            <tbody id="game-count-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="stats-section">
+                        <h3>男子排名</h3>
+                        <table class="stats-table"><thead><tr><th>#</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody id="male-rank"></tbody></table>
+                    </div>
+                    <div class="stats-section">
+                        <h3>女子排名</h3>
+                        <table class="stats-table"><thead><tr><th>#</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody id="female-rank"></tbody></table>
+                    </div>
+                </div>
+            </div>`;
+            attachEvents();
+            updateStats();
+        }
 
-                    if (!response.ok) {
-                        let errorText = `服务器错误，状态码: ${response.status}`;
-                        try {
-                            // 尝试解析后端返回的 JSON 错误信息
-                            const err = await response.json();
-                            errorText = err.error || errorText;
-                        } catch (e) {
-                            // 如果不是 JSON，可能是 Vercel 网关的纯文本错误
-                            errorText = `无法解析服务器响应，请稍后重试。`;
-                        }
-                        throw new Error(errorText);
-                    }
-                    const data = await response.json();
-                    initializeApp(data);
-                } catch (error) {
-                    // 3. 提供友好的错误提示和重试按钮
-                    let errorMessage = error.message;
-                    if (errorMessage.includes('请求超时') || error.name === 'AbortError') {
-                        errorMessage = '服务器响应超时。这可能是由于当前网络环境访问国外服务器较慢导致。';
-                    } else if (errorMessage.includes('Failed to fetch')) {
-                        errorMessage = '网络连接失败，无法连接到后端服务器。';
-                    }
-                    
-                    root.innerHTML = `<div class="container" style="max-width: 800px;">
-                        <h1>加载失败</h1>
-                        <p class="error">${errorMessage}</p>
-                        <div class="top-actions">
-                            <button id="retry-btn" style="background-color: var(--primary-color); color: white;">重试</button>
-                            <a href="index.html">返回首页</a>
-                        </div>
-                    </div>`;
-                    
-                    // 为新的重试按钮附加事件
-                    document.getElementById('retry-btn').addEventListener('click', () => {
-                        loadDataFromBackend(id);
-                    });
+        function renderMatchCard(match, index, isSingles) {
+            const isRelaxed = match.type === 'relaxed';
+            const team1Text = match.team1.join(' & ');
+            const team2Text = match.team2.join(' & ');
+            const scoreText = (match.score && match.score.team1 != null)
+                ? `${match.score.team1} : ${match.score.team2}`
+                : '\u2014 : \u2014';
+            return `
+            <div class="match-card ${isRelaxed ? 'relaxed-match' : ''}" data-index="${index}" style="animation-delay:${index * 0.06}s">
+                <div class="match-index"><span>${index + 1}</span></div>
+                <div class="match-teams">
+                    <span class="team-name">${team1Text}</span>
+                    <span class="vs-badge">VS</span>
+                    <span class="team-name">${team2Text}</span>
+                    ${isRelaxed ? '<span class="relaxed-badge">非标准混双</span>' : ''}
+                </div>
+                <div class="score-area">
+                    <div class="score-display">${scoreText}</div>
+                    <div class="score-input">
+                        <input type="number" class="s1" min="0" value="0">
+                        <span class="sep">:</span>
+                        <input type="number" class="s2" min="0" value="0">
+                    </div>
+                    <button class="btn-score edit-btn">比分</button>
+                    <button class="btn-score save save-score-btn" style="display:none">保存</button>
+                </div>
+            </div>`;
+        }
+
+        function attachEvents() {
+            document.getElementById('match-list').addEventListener('click', e => {
+                const card = e.target.closest('.match-card');
+                if (!card) return;
+                const idx = parseInt(card.dataset.index, 10);
+
+                if (e.target.classList.contains('edit-btn')) {
+                    const disp = card.querySelector('.score-display');
+                    const inp = card.querySelector('.score-input');
+                    const editBtn = card.querySelector('.edit-btn');
+                    const saveBtn = card.querySelector('.save-score-btn');
+                    disp.style.display = 'none';
+                    inp.style.display = 'flex';
+                    editBtn.style.display = 'none';
+                    saveBtn.style.display = 'inline-flex';
+                    const sc = matches[idx].score || { team1: 0, team2: 0 };
+                    card.querySelector('.s1').value = sc.team1 || 0;
+                    card.querySelector('.s2').value = sc.team2 || 0;
+                    card.querySelector('.s1').focus();
+                } else if (e.target.classList.contains('save-score-btn')) {
+                    const s1 = parseInt(card.querySelector('.s1').value, 10) || 0;
+                    const s2 = parseInt(card.querySelector('.s2').value, 10) || 0;
+                    matches[idx].score = { team1: s1, team2: s2 };
+                    card.querySelector('.score-display').textContent = `${s1} : ${s2}`;
+                    card.querySelector('.score-display').style.display = '';
+                    card.querySelector('.score-input').style.display = 'none';
+                    card.querySelector('.edit-btn').style.display = '';
+                    card.querySelector('.save-score-btn').style.display = 'none';
+                    card.classList.add('saved');
+                    setTimeout(() => card.classList.remove('saved'), 700);
+                    updateStats();
                 }
-            }
+            });
 
-            function loadDataFromSession() {
-                const dataString = sessionStorage.getItem('current_match_data');
-                if (!dataString) {
-                    root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">没有找到对局数据，请返回首页重新生成。</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
-                    return;
+            document.getElementById('shuffle-btn').addEventListener('click', () => {
+                for (let i = matches.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [matches[i], matches[j]] = [matches[j], matches[i]];
                 }
-                initializeApp(JSON.parse(dataString));
-            }
-
-            function initializeApp(data) {
-                const { matches, players, id: historyId, name } = data;
-
-                if (!matchIdFromUrl && historyId) {
-                    const newUrl = `${window.location.pathname}?id=${historyId}`;
-                    window.history.replaceState({ path: newUrl }, '', newUrl);
-                }
-
-                function render() {
-                    if (!matches || !players) {
-                        console.error("对局或队员数据缺失，无法渲染页面。");
-                        root.innerHTML = `<div class="container" style="max-width: 800px;"><h1>错误</h1><p class="error">数据不完整，无法加载对局。</p><div class="top-actions"><a href="index.html">返回首页</a></div></div>`;
-                        return;
-                    }
-                    const pageTitle = name ? name : '对阵结果';
-                    
-                    root.innerHTML = `
-                    <div class="main-container">
-                        <div class="container">
-                            <h1>${pageTitle}</h1>
-                            <div class="top-actions">
-                                <button id="shuffle-btn">随机排序对局</button>
-                                <button id="save-history-btn">${data.timestamp ? '更新记录' : '保存对局记录'}</button>
-                                <a href="index.html">返回首页</a>
-                            </div>
-                            <div class="match-list" id="match-list">
-                                <!-- 内容将由 renderMatchList 动态填充 -->
-                            </div>
-                        </div>
-                        <div class="stats-panel">
-                            <h2>实时统计</h2>
-                            <h3>男子排名</h3>
-                            <table id="male-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
-                            <h3>女子排名</h3>
-                            <table id="female-rankings"><thead><tr><th>排名</th><th>队员</th><th>胜/负</th><th>净胜分</th></tr></thead><tbody></tbody></table>
-                        </div>
-                    </div>`;
-
-                    // **修复关键**：延迟执行依赖于新 DOM 的函数
-                    setTimeout(() => {
-                        renderMatchList();
-                        calculateAndDisplayStats();
-                        attachEventListeners();
-                    }, 0);
-                }
-
-                function renderMatchList() {
-                    const matchListEl = document.getElementById('match-list');
-                    if (!matchListEl) return;
-
-                    matchListEl.innerHTML = matches.map((match, index) => {
-                        const isSingles = match.team1.length === 1;
-                        const team1Text = isSingles ? match.team1[0] : match.team1.join(' & ');
-                        const team2Text = isSingles ? match.team2[0] : match.team2.join(' & ');
-                        const playersStr = [...match.team1, ...match.team2].join(',');
-                        return `
-                        <div class="match" id="match-${index}" data-players="${playersStr}">
-                            <div class="teams">
-                                <span class="team">${team1Text}</span>
-                                <span class="vs">VS</span>
-                                <span class="team">${team2Text}</span>
-                            </div>
-                            <div class="score-container">
-                                <div class="score-display"><span class="score-text">${(match.score && match.score.team1 != null) ? `${match.score.team1} : ${match.score.team2}` : '-- : --'}</span></div>
-                                <div class="score-input" style="display: none;">
-                                    <input type="number" class="score-team1" min="0" value="0"> : <input type="number" class="score-team2" min="0" value="0">
-                                </div>
-                                <div class="score-actions">
-                                    <button class="edit-score-btn">输入比分</button>
-                                    <button class="save-score-btn" style="display: none;">保存</button>
-                                </div>
-                            </div>
-                        </div>
-                    `}).join('');
-                }
-
-                function calculateAndDisplayStats() {
-                    const stats = {};
-                    if (!players) return;
-                    players.forEach(p => { stats[p.name] = { wins: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, gender: p.gender }; });
-
-                    if (!matches) return;
-                    matches.forEach((matchData, index) => {
-                        if (!matchData.score || matchData.score.team1 == null) return;
-
-                        const team1Players = matchData.team1;
-                        const team2Players = matchData.team2;
-                        const score1 = parseInt(matchData.score.team1, 10);
-                        const score2 = parseInt(matchData.score.team2, 10);
-
-                        if (isNaN(score1) || isNaN(score2)) return;
-
-                        team1Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score1; stats[p].scoreAgainst += score2; } });
-                        team2Players.forEach(p => { if(stats[p]) { stats[p].scoreFor += score2; stats[p].scoreAgainst += score1; } });
-
-                        if (score1 > score2) {
-                            team1Players.forEach(p => { if(stats[p]) stats[p].wins++; });
-                            team2Players.forEach(p => { if(stats[p]) stats[p].losses++; });
-                        } else if (score2 > score1) {
-                            team2Players.forEach(p => { if(stats[p]) stats[p].wins++; });
-                            team1Players.forEach(p => { if(stats[p]) stats[p].losses++; });
-                        }
-                    });
-
-                    const maleStats = [], femaleStats = [];
-                    for (const playerName in stats) {
-                        const pStat = stats[playerName];
-                        pStat.name = playerName;
-                        pStat.netScore = pStat.scoreFor - pStat.scoreAgainst;
-                        if (pStat.gender === 'M') maleStats.push(pStat); else femaleStats.push(pStat);
-                    }
-
-                    const sortFn = (a, b) => b.wins - a.wins || b.netScore - a.netScore;
-                    maleStats.sort(sortFn); femaleStats.sort(sortFn);
-
-                    const renderTable = (tbody, data) => {
-                        if (!tbody) return;
-                        tbody.innerHTML = data.map((p, index) => `<tr><td>${index + 1}</td><td>${p.name}</td><td>${p.wins}/${p.losses}</td><td>${p.netScore > 0 ? '+' : ''}${p.netScore}</td></tr>`).join('');
-                    };
-                    renderTable(document.querySelector('#male-rankings tbody'), maleStats);
-                    renderTable(document.querySelector('#female-rankings tbody'), femaleStats);
-                }
-
-                function attachEventListeners() {
-                    const saveBtn = document.getElementById('save-history-btn');
-                    const shuffleBtn = document.getElementById('shuffle-btn');
-                    const matchList = document.getElementById('match-list');
-
-                    if (!saveBtn || !shuffleBtn || !matchList) {
-                        console.error("一个或多个关键元素未找到，事件监听器无法附加。");
-                        return;
-                    }
-
-                    matchList.addEventListener('click', e => {
-                        const matchEl = e.target.closest('.match');
-                        if (!matchEl) return;
-                        const matchIndex = parseInt(matchEl.id.split('-')[1], 10);
-                        const matchData = matches[matchIndex];
-
-                        if (e.target.classList.contains('edit-score-btn')) {
-                            matchEl.querySelector('.score-display').style.display = 'none';
-                            matchEl.querySelector('.score-input').style.display = 'flex';
-                            e.target.style.display = 'none';
-                            matchEl.querySelector('.save-score-btn').style.display = 'inline-block';
-                            const score = matchData.score || { team1: 0, team2: 0 };
-                            matchEl.querySelector('.score-team1').value = score.team1 || 0;
-                            matchEl.querySelector('.score-team2').value = score.team2 || 0;
-                        } else if (e.target.classList.contains('save-score-btn')) {
-                            const score1 = parseInt(matchEl.querySelector('.score-team1').value, 10) || 0;
-                            const score2 = parseInt(matchEl.querySelector('.score-team2').value, 10) || 0;
-                            matchData.score = { team1: score1, team2: score2 };
-                            matchEl.querySelector('.score-text').textContent = `${score1} : ${score2}`;
-                            matchEl.querySelector('.score-display').style.display = 'block';
-                            matchEl.querySelector('.score-input').style.display = 'none';
-                            e.target.style.display = 'none';
-                            matchEl.querySelector('.edit-score-btn').style.display = 'inline-block';
-                            calculateAndDisplayStats();
-                        }
-                    });
-
-                    saveBtn.addEventListener('click', async () => {
-                        saveBtn.disabled = true;
-                        saveBtn.textContent = '保存中...';
-
-                        const dataToSave = { ...data, matches };
-
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/api/history`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(dataToSave)
-                            });
-
-                            if (response.ok) {
-                                alert('记录已成功保存到云端！');
-                                if (!data.timestamp) {
-                                    data.timestamp = new Date().toISOString();
-                                    sessionStorage.setItem('current_match_data', JSON.stringify(data));
-                                }
-                                saveBtn.textContent = '更新记录';
-                            } else {
-                                const err = await response.json();
-                                throw new Error(err.error || '保存失败');
-                            }
-                        } catch (error) {
-                            alert(`保存失败: ${error.message}`);
-                            saveBtn.textContent = data.timestamp ? '更新记录' : '保存对局记录';
-                        } finally {
-                            saveBtn.disabled = false;
-                        }
-                    });
-
-                    shuffleBtn.addEventListener('click', () => {
-                        for (let i = matches.length - 1; i > 0; i--) {
-                            const j = Math.floor(Math.random() * (i + 1));
-                            [matches[i], matches[j]] = [matches[j], matches[i]];
-                        }
-                        // 只重新渲染对局列表，而不是整个页面
-                        renderMatchList();
-                    });
-                }
-
-                // 启动应用
                 render();
+                showToast('对局顺序已重新排列', 'info');
+            });
+
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    if (!params) return;
+                    refreshBtn.innerHTML = '<span class="spinner"></span> 生成中...';
+                    refreshBtn.disabled = true;
+                    setTimeout(() => {
+                        try {
+                            matches = Matching.generate(players, params.mode, params.k);
+                            sessionStorage.setItem('current_match_data', JSON.stringify({ matches, players, params, name: matchName }));
+                            historyId = null;
+                            render();
+                            showToast('已重新生成对阵', 'success');
+                        } catch (err) {
+                            showToast(err.message || '生成失败', 'error');
+                        } finally {
+                            refreshBtn.innerHTML = '\u21BB 重新生成';
+                            refreshBtn.disabled = false;
+                        }
+                    }, 80);
+                });
             }
-        });
+
+            document.getElementById('save-btn').addEventListener('click', () => {
+                const history = JSON.parse(localStorage.getItem(DB_HISTORY_KEY) || '[]');
+                const id = historyId || crypto.randomUUID();
+                const entry = {
+                    id,
+                    timestamp: new Date().toISOString(),
+                    players,
+                    matches,
+                    params,
+                    name: matchName || ''
+                };
+                const existing = history.findIndex(h => h.id === historyId);
+                if (existing > -1) {
+                    history[existing] = entry;
+                } else {
+                    history.push(entry);
+                }
+                localStorage.setItem(DB_HISTORY_KEY, JSON.stringify(history));
+                if (!historyId) {
+                    historyId = id;
+                    data.id = id;
+                    sessionStorage.setItem('current_match_data', JSON.stringify({ ...data, matches, id }));
+                    render();
+                }
+                showToast('记录已保存', 'success');
+            });
+        }
+
+        function updateStats() {
+            const gameCounts = {};
+            players.forEach(p => gameCounts[p.name] = 0);
+            matches.forEach(m => {
+                [...m.team1, ...m.team2].forEach(name => {
+                    if (gameCounts[name] !== undefined) gameCounts[name]++;
+                });
+            });
+
+            const gcBody = document.getElementById('game-count-body');
+            if (gcBody) {
+                gcBody.innerHTML = players.map(p =>
+                    `<tr><td>${p.name}</td><td style="text-align:right;font-weight:600">${gameCounts[p.name]}</td></tr>`
+                ).join('');
+            }
+
+            const stats = {};
+            players.forEach(p => { stats[p.name] = { wins: 0, losses: 0, sf: 0, sa: 0, gender: p.gender }; });
+
+            matches.forEach(m => {
+                if (!m.score || m.score.team1 == null) return;
+                const s1 = parseInt(m.score.team1, 10);
+                const s2 = parseInt(m.score.team2, 10);
+                if (isNaN(s1) || isNaN(s2)) return;
+
+                m.team1.forEach(n => { if (stats[n]) { stats[n].sf += s1; stats[n].sa += s2; } });
+                m.team2.forEach(n => { if (stats[n]) { stats[n].sf += s2; stats[n].sa += s1; } });
+
+                if (s1 > s2) {
+                    m.team1.forEach(n => { if (stats[n]) stats[n].wins++; });
+                    m.team2.forEach(n => { if (stats[n]) stats[n].losses++; });
+                } else if (s2 > s1) {
+                    m.team2.forEach(n => { if (stats[n]) stats[n].wins++; });
+                    m.team1.forEach(n => { if (stats[n]) stats[n].losses++; });
+                }
+            });
+
+            const maleArr = [], femaleArr = [];
+            for (const name in stats) {
+                const s = stats[name];
+                s.name = name;
+                s.net = s.sf - s.sa;
+                (s.gender === 'M' ? maleArr : femaleArr).push(s);
+            }
+            const sortFn = (a, b) => b.wins - a.wins || b.net - a.net;
+            maleArr.sort(sortFn);
+            femaleArr.sort(sortFn);
+
+            const renderRank = (id, arr) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerHTML = arr.map((p, i) => {
+                    const cls = p.net > 0 ? 'positive' : (p.net < 0 ? 'negative' : '');
+                    return `<tr><td>${i + 1}</td><td>${p.name}</td><td>${p.wins}/${p.losses}</td><td class="${cls}">${p.net > 0 ? '+' : ''}${p.net}</td></tr>`;
+                }).join('');
+            };
+            renderRank('male-rank', maleArr);
+            renderRank('female-rank', femaleArr);
+        }
+
+        render();
+    });
     </script>
 </body>
 </html>
