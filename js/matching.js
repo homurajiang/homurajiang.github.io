@@ -526,6 +526,24 @@ const Matching = (() => {
             return matches ? matches.slice() : [];
         }
 
+        // 先跑一次；如果结果和输入完全一致，再试最多 2 次，仍一致就退化为纯随机打乱
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const result = singleReorder(matches, maxConsec);
+            if (!isSameOrder(result, matches)) return result;
+        }
+        return shuffle(matches);
+    }
+
+    function isSameOrder(a, b) {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+        }
+        return true;
+    }
+
+    function singleReorder(matches, maxConsec) {
         const playersIn = (m) => new Set([...(m.team1 || []), ...(m.team2 || [])]);
 
         // 检查：把 candidate 接在 ordered 末尾，是否造成某选手连续 > maxConsec
@@ -543,33 +561,29 @@ const Matching = (() => {
             return false;
         };
 
-        // 统计每个选手在所有对局里出现的总次数（剩余次数用于贪心排序）
         const remaining = {};
         for (const m of matches) {
             for (const p of playersIn(m)) remaining[p] = (remaining[p] || 0) + 1;
         }
 
-        const pool = shuffle(matches); // 初始打乱，避免每次重排都是同样的结果
+        const pool = shuffle(matches);
         const ordered = [];
 
         while (pool.length > 0) {
-            // 先挑出所有不违规的候选
             let candidates = [];
             for (let i = 0; i < pool.length; i++) {
                 if (!wouldViolate(pool[i], ordered)) candidates.push(i);
             }
-            // 全都违规则退而求其次
             if (candidates.length === 0) {
                 candidates = pool.map((_, i) => i);
             }
-            // 在候选里，优先选"所含选手剩余出场数之和"最大的那些（让还要打很多场的选手先上场）
-            // 在前 30% 候选里随机挑一个，保持一点随机性
+            // 按"所含选手剩余出场数之和"排序，再在前 50% 里随机挑一个（放宽随机度）
             candidates.sort((a, b) => {
                 const sumA = [...playersIn(pool[a])].reduce((s, p) => s + (remaining[p] || 0), 0);
                 const sumB = [...playersIn(pool[b])].reduce((s, p) => s + (remaining[p] || 0), 0);
                 return sumB - sumA;
             });
-            const topN = Math.max(1, Math.ceil(candidates.length * 0.3));
+            const topN = Math.max(1, Math.ceil(candidates.length * 0.5));
             const pickedIdx = candidates[Math.floor(Math.random() * topN)];
             const picked = pool[pickedIdx];
             ordered.push(picked);
@@ -577,10 +591,10 @@ const Matching = (() => {
             for (const p of playersIn(picked)) remaining[p] -= 1;
         }
 
-        // 2-opt 修复
+        // 2-opt 修复：把违规窗口里的对局换出去
         const findFirstViolation = (arr) => {
             for (let i = maxConsec; i < arr.length; i++) {
-                const window = arr.slice(i - maxConsec, i + 1); // 长度 maxConsec+1
+                const window = arr.slice(i - maxConsec, i + 1);
                 const first = playersIn(window[0]);
                 for (const p of first) {
                     let all = true;
@@ -597,7 +611,6 @@ const Matching = (() => {
             const v = findFirstViolation(ordered);
             if (!v) break;
             let swapped = false;
-            // 尝试把 v.index 位置和后面第一个不含 v.player 的对局对换
             for (let j = v.index + 1; j < ordered.length; j++) {
                 if (!playersIn(ordered[j]).has(v.player)) {
                     [ordered[v.index], ordered[j]] = [ordered[j], ordered[v.index]];
@@ -605,7 +618,6 @@ const Matching = (() => {
                     break;
                 }
             }
-            // 若后面没有了，尝试往前交换
             if (!swapped) {
                 for (let j = v.index - maxConsec; j >= 0; j--) {
                     if (!playersIn(ordered[j]).has(v.player)) {
@@ -615,7 +627,7 @@ const Matching = (() => {
                     }
                 }
             }
-            if (!swapped) break; // 没法再修了（该选手在所有对局里都出现，数学不可避免）
+            if (!swapped) break; // 数学上不可避免
         }
 
         return ordered;

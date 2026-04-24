@@ -488,22 +488,28 @@
         let role = 'local';       // 'local' | 'owner' | 'viewer'
         let matches, players, params, matchName = '';
         let data;
+        let lastKnownUpdatedAt = 0;
         let loadError = null;
 
+        const tsOf = (d) => (d && d.updatedAt ? new Date(d.updatedAt).getTime() : 0) || 0;
+
         if (shareId) {
-            // 分享链接：先尝试 KV，拉不到回退快照
+            // 分享链接：同时拿 KV 和 URL 快照，取 updatedAt 更新的那个
+            let remote = null;
+            let snapshot = null;
             try {
-                const remote = await Share.fetchFromKV(shareId);
-                if (remote) {
-                    data = remote;
-                } else if (urlSnapshot) {
-                    data = Share.decompressData(urlSnapshot);
-                }
+                remote = await Share.fetchFromKV(shareId);
             } catch (err) {
                 console.warn('KV 读取失败，尝试使用 URL 快照', err);
-                if (urlSnapshot) data = Share.decompressData(urlSnapshot);
-                else loadError = err;
+                loadError = err;
             }
+            if (urlSnapshot) snapshot = Share.decompressData(urlSnapshot);
+            if (remote && snapshot) {
+                data = tsOf(remote) >= tsOf(snapshot) ? remote : snapshot;
+            } else {
+                data = remote || snapshot;
+            }
+            if (data) lastKnownUpdatedAt = tsOf(data);
             role = Share.isOwner(shareId) ? 'owner' : 'viewer';
         } else if (urlSnapshot) {
             // 纯快照链接（没有 id）
@@ -516,6 +522,11 @@
                 try { data = JSON.parse(dataString); } catch (_) {}
             }
             role = 'local';
+        }
+
+        // 访客加载成功：把这场对局记到"我的对局"列表里（viewer 角色）
+        if (role === 'viewer' && shareId && data) {
+            Share.markAsViewed(shareId);
         }
 
         if (!data) {
@@ -569,10 +580,12 @@
                 getData: currentPayload,
                 callbacks: {
                     onStart: () => setSyncStatus('syncing', '正在同步…'),
-                    onSuccess: () => {
+                    onSuccess: (payload) => {
+                        lastKnownUpdatedAt = tsOf(payload);
                         setSyncStatus('ok', '已同步 · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-                        // 每次同步后也刷新 URL 中的快照，保证复制的链接是最新的
                         Share.updateAddressBar({ id: shareId, data: currentPayload() });
+                        // 把轮询器的 baseline 设为刚上传的内容，下一轮轮询不会误判成"远端有更新"
+                        if (ownerPoller) ownerPoller.setBaseline(payload);
                     },
                     onError: (err, n, willRetry) => {
                         console.warn('同步失败', err);
@@ -582,26 +595,97 @@
             });
         }
 
-        // ── 轮询器（Viewer 模式才会初始化） ────────────────────────
-        let poller = null;
-        function initPoller() {
-            if (poller || !shareId || role !== 'viewer') return;
-            poller = Share.createPoller({
+        // ── Viewer 轮询（20s 间隔，远端变了就直接合并） ───────────
+        let viewerPoller = null;
+        function initViewerPoller() {
+            if (viewerPoller || !shareId || role !== 'viewer') return;
+            viewerPoller = Share.createPoller({
                 getId: () => shareId,
                 intervalMs: 20000,
                 onUpdate: (remote) => {
-                    matches = remote.matches || [];
-                    players = remote.players || [];
-                    params = remote.params || null;
-                    matchName = remote.name || matchName;
-                    render();
+                    applyRemote(remote);
                     const t = remote.updatedAt ? new Date(remote.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
                     showToast(t ? `已更新到最新数据（${t}）` : '已更新到最新数据', 'info');
                 },
-                onError: (err) => console.warn('轮询失败', err),
+                onError: (err) => console.warn('Viewer 轮询失败', err),
             });
-            poller.setBaseline(data); // 首次加载的数据作为基线，避免误报"有更新"
-            poller.start();
+            viewerPoller.setBaseline(data);
+            viewerPoller.start();
+        }
+
+        // ── Owner 轮询（30s 间隔，合并多 owner 的远端改动） ──────
+        //   - 如果本地 syncer 有 pending 改动 → 跳过合并，本地优先
+        //   - 否则远端 updatedAt > 本地已知 → 合并远端数据并 toast
+        let ownerPoller = null;
+        function initOwnerPoller() {
+            if (ownerPoller || !shareId || role !== 'owner') return;
+            ownerPoller = Share.createPoller({
+                getId: () => shareId,
+                intervalMs: 30000,
+                shouldMerge: (remote) => {
+                    if (syncer && syncer.hasPending()) return false; // 本地正在改，暂缓
+                    return tsOf(remote) > lastKnownUpdatedAt;
+                },
+                onUpdate: (remote) => {
+                    applyRemote(remote);
+                    const t = remote.updatedAt ? new Date(remote.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+                    showToast(t ? `云端有新改动，已合并（${t}）` : '云端有新改动，已合并', 'info');
+                },
+                onError: (err) => console.warn('Owner 轮询失败', err),
+            });
+            ownerPoller.setBaseline(data);
+            ownerPoller.start();
+        }
+
+        function applyRemote(remote) {
+            matches = remote.matches || [];
+            players = remote.players || [];
+            params = remote.params || null;
+            matchName = remote.name || matchName;
+            lastKnownUpdatedAt = tsOf(remote);
+            render();
+        }
+
+        // ── Viewer 升级为 Owner ───────────────────────────────────
+        async function upgradeToOwner() {
+            if (!shareId) return;
+            const ok = await openConfirmModal({
+                title: '申请编辑权限',
+                message: '升级后你可以修改这场对局的比分、对阵顺序，所有改动会实时同步到云端，其他查看者也会看到。确定要继续吗？',
+                confirmText: '升级为编辑者',
+                cancelText: '再看看',
+            });
+            if (!ok) return;
+            Share.markAsOwner(shareId);
+            role = 'owner';
+            if (viewerPoller) { viewerPoller.stop(); viewerPoller = null; }
+            render();
+            initSyncer();
+            initOwnerPoller();
+            setSyncStatus('ok', '已开启云同步');
+            showToast('已升级为编辑者，可以直接修改比分了', 'success');
+        }
+
+        // ── 通用确认弹窗 ──────────────────────────────────────────
+        function openConfirmModal({ title, message, confirmText = '确定', cancelText = '取消' }) {
+            return new Promise((resolve) => {
+                const backdrop = document.createElement('div');
+                backdrop.className = 'share-modal-backdrop';
+                backdrop.innerHTML = `
+                    <div class="share-modal" role="dialog">
+                        <h3>${title}</h3>
+                        <p>${message}</p>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" id="confirm-cancel-btn">${cancelText}</button>
+                            <button class="btn btn-primary" id="confirm-ok-btn">${confirmText}</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(backdrop);
+                const close = (val) => { backdrop.remove(); resolve(val); };
+                backdrop.querySelector('#confirm-ok-btn').addEventListener('click', () => close(true));
+                backdrop.querySelector('#confirm-cancel-btn').addEventListener('click', () => close(false));
+                backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(false); });
+            });
         }
 
         // ── 分享弹窗 ───────────────────────────────────────────────
@@ -638,32 +722,59 @@
             backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
         }
 
-        // ── 开启云同步 ─────────────────────────────────────────────
+        // ── 开启云同步（带重试：3 次，1s → 2s → 4s 指数退避） ────
         async function enableCloudSync() {
             const btn = document.getElementById('cloud-share-btn');
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 上传中...'; }
+            const setBtnText = (t) => { if (btn) btn.innerHTML = t; };
+            if (btn) btn.disabled = true;
+            setBtnText('<span class="spinner"></span> 上传中...');
             try {
                 const newId = Share.generateShortId();
-                await Share.uploadToKV(newId, currentPayload());
+                const payload = await Share.uploadToKVWithRetry(newId, currentPayload(), {
+                    maxRetries: 3,
+                    onAttempt: (n, total) => {
+                        if (n > 1) setBtnText(`<span class="spinner"></span> 上传失败，正在重试 (${n}/${total})...`);
+                    },
+                });
                 Share.markAsOwner(newId);
                 shareId = newId;
                 role = 'owner';
+                lastKnownUpdatedAt = tsOf(payload);
                 Share.updateAddressBar({ id: shareId, data: currentPayload() });
                 render();
                 initSyncer();
+                initOwnerPoller();
                 setSyncStatus('ok', '已同步 · 刚刚');
                 const url = Share.buildShareURL({ id: shareId, data: currentPayload() });
                 openShareModal(url, '已保存到比赛历史 · 云同步已开启',
                     '这场比赛已保存到"比赛历史"（可在首页打开）。以下链接可以分享给别人，你之后改动比分或对阵，对方刷新即可看到最新。');
             } catch (err) {
                 console.error(err);
-                showToast('上传失败：' + (err.message || err), 'error');
-                if (btn) { btn.disabled = false; btn.innerHTML = '\u2601 开启云同步并分享'; }
+                showToast('上传失败（已重试 3 次）：' + (err.message || err), 'error');
+                if (btn) { btn.disabled = false; setBtnText('☁ 开启云同步并分享'); }
             }
         }
 
-        // ── 复制纯快照分享链接 ─────────────────────────────────────
-        function copySnapshotShare() {
+        // ── 复制分享链接（先 flush 待同步的改动，避免分享到旧数据） ─
+        async function copySnapshotShare() {
+            const btn = document.getElementById('share-copy-link-btn');
+            const origText = btn ? btn.innerHTML : '';
+            if (syncer && syncer.hasPending()) {
+                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 同步最新数据...'; }
+                try {
+                    await syncer.flush();
+                } catch (err) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+                    const ok = await openConfirmModal({
+                        title: '云端同步失败',
+                        message: '最新的改动还没来得及上传到云端。你仍然可以生成分享链接，但访客拿到的可能是旧数据。是否继续？',
+                        confirmText: '继续生成链接',
+                        cancelText: '取消',
+                    });
+                    if (!ok) return;
+                }
+                if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+            }
             const url = Share.buildShareURL({ id: shareId, data: currentPayload() });
             openShareModal(url,
                 shareId ? '分享链接' : '快照分享链接',
@@ -682,21 +793,22 @@
             const canEdit = !isViewer;
 
             const roleBadgeHtml = isViewer
-                ? `<span class="role-badge viewer">\u{1F441} 访客视图</span>`
-                : (isOwner ? `<span class="role-badge owner">\u{2601} 云同步中</span>` : '');
+                ? `<span class="role-badge viewer">👁 访客视图</span>`
+                : (isOwner ? `<span class="role-badge owner">☁ 云同步中</span>` : '');
 
             const topActions = isViewer ? `
-                    ${shareId ? `<button class="btn btn-secondary" id="viewer-refresh-btn">\u21BB 刷新</button>` : ''}
-                    <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                    ${shareId ? `<button class="btn btn-secondary" id="viewer-refresh-btn">↻ 刷新</button>` : ''}
+                    ${shareId ? `<button class="btn btn-accent" id="upgrade-owner-btn">✎ 申请编辑权限</button>` : ''}
+                    <a href="index.html" class="btn btn-secondary">← 返回首页</a>
                 ` : `
-                    ${params ? `<button class="btn btn-accent" id="refresh-btn">\u21BB 重新生成</button>` : ''}
-                    <button class="btn btn-primary" id="shuffle-btn">\u2195 重排对局顺序</button>
+                    ${params ? `<button class="btn btn-accent" id="refresh-btn">↻ 重新生成</button>` : ''}
+                    <button class="btn btn-primary" id="shuffle-btn">↕ 重排对局顺序</button>
                     ${shareId
-                        ? `<button class="btn btn-primary" id="share-copy-link-btn">\u{1F517} 复制分享链接</button>`
-                        : `<button class="btn btn-success" id="cloud-share-btn">\u{2601} 开启云同步并分享</button>
-                           <button class="btn btn-secondary" id="share-copy-link-btn">\u{1F517} 复制快照链接</button>`
+                        ? `<button class="btn btn-primary" id="share-copy-link-btn">🔗 复制分享链接</button>`
+                        : `<button class="btn btn-success" id="cloud-share-btn">☁ 开启云同步并分享</button>
+                           <button class="btn btn-secondary" id="share-copy-link-btn">🔗 复制快照链接</button>`
                     }
-                    <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                    <a href="index.html" class="btn btn-secondary">← 返回首页</a>
                 `;
 
             const syncBarHtml = (isOwner && shareId) ? `
@@ -708,7 +820,7 @@
 
             const viewerHintHtml = isViewer ? `
                 <div class="viewer-readonly-hint">
-                    \u{1F441} 你正在以访客模式查看他人分享的对阵，此页面只读。${shareId ? '页面会每 20 秒自动拉取最新数据。' : '这是分享时的静态快照。'}
+                    👁 你正在以访客模式查看他人分享的对阵，此页面只读。${shareId ? '页面会每 20 秒自动拉取最新数据；如需修改比分，可点击上方"申请编辑权限"。' : '这是分享时的静态快照。'}
                 </div>` : '';
 
             root.innerHTML = `
@@ -757,7 +869,7 @@
             const team2Text = match.team2.join(' & ');
             const scoreText = (match.score && match.score.team1 != null)
                 ? `${match.score.team1} : ${match.score.team2}`
-                : '\u2014 : \u2014';
+                : '— : —';
             const scoreControls = canEdit ? `
                     <div class="score-input">
                         <input type="number" class="s1" min="0" value="0">
@@ -825,11 +937,18 @@
             const shuffleBtn = document.getElementById('shuffle-btn');
             if (shuffleBtn) {
                 shuffleBtn.addEventListener('click', () => {
-                    // 约束下重排：尽量不让任何人连续出场 > 3 场
-                    matches = Matching.reorderWithConsecutiveLimit(matches, 3);
-                    render();
-                    showToast('对局顺序已重新排列（已考虑体力均衡）', 'info');
-                    if (syncer) syncer.schedule();
+                    try {
+                        if (!window.Matching || typeof Matching.reorderWithConsecutiveLimit !== 'function') {
+                            throw new Error('匹配模块未加载（请刷新页面）');
+                        }
+                        matches = Matching.reorderWithConsecutiveLimit(matches, 3);
+                        render();
+                        showToast('对局顺序已重新排列（已考虑体力均衡）', 'info');
+                        if (syncer) syncer.schedule();
+                    } catch (err) {
+                        console.error('重排失败', err);
+                        showToast('重排失败：' + (err.message || err), 'error');
+                    }
                 });
             }
 
@@ -847,10 +966,11 @@
                             showToast('已重新生成对阵', 'success');
                             if (syncer) syncer.schedule();
                         } catch (err) {
+                            console.error('重新生成失败', err);
                             showToast(err.message || '生成失败', 'error');
                         } finally {
-                            refreshBtn.innerHTML = '\u21BB 重新生成';
-                            refreshBtn.disabled = false;
+                            const rb = document.getElementById('refresh-btn');
+                            if (rb) { rb.innerHTML = '↻ 重新生成'; rb.disabled = false; }
                         }
                     }, 80);
                 });
@@ -862,9 +982,16 @@
             const copyLinkBtn = document.getElementById('share-copy-link-btn');
             if (copyLinkBtn) copyLinkBtn.addEventListener('click', copySnapshotShare);
 
+            const upgradeBtn = document.getElementById('upgrade-owner-btn');
+            if (upgradeBtn) upgradeBtn.addEventListener('click', upgradeToOwner);
+
             const syncNowBtn = document.getElementById('sync-now-btn');
             if (syncNowBtn) syncNowBtn.addEventListener('click', async () => {
-                if (syncer) await syncer.flush();
+                try {
+                    if (syncer) await syncer.flush();
+                } catch (err) {
+                    showToast('同步失败：' + (err.message || err), 'error');
+                }
             });
 
             const viewerRefreshBtn = document.getElementById('viewer-refresh-btn');
@@ -872,23 +999,16 @@
                 viewerRefreshBtn.innerHTML = '<span class="spinner"></span> 刷新中...';
                 viewerRefreshBtn.disabled = true;
                 try {
-                    if (poller) await poller.refreshNow();
+                    if (viewerPoller) await viewerPoller.refreshNow();
                     else {
                         const remote = await Share.fetchFromKV(shareId);
-                        if (remote) {
-                            matches = remote.matches || [];
-                            players = remote.players || [];
-                            params = remote.params || null;
-                            matchName = remote.name || matchName;
-                            render();
-                        }
+                        if (remote) applyRemote(remote);
                     }
                 } catch (err) {
                     showToast('刷新失败：' + (err.message || err), 'error');
                 } finally {
-                    // render() 会重新挂事件，这里的按钮引用可能已失效
                     const btn = document.getElementById('viewer-refresh-btn');
-                    if (btn) { btn.innerHTML = '\u21BB 刷新'; btn.disabled = false; }
+                    if (btn) { btn.innerHTML = '↻ 刷新'; btn.disabled = false; }
                 }
             });
         }
@@ -955,21 +1075,22 @@
 
         render();
 
-        // Owner 模式：启动自动同步器
+        // Owner 模式：启动自动同步器 + 轮询合并远端
         if (role === 'owner' && shareId) {
             initSyncer();
+            initOwnerPoller();
             setSyncStatus('ok', '已开启云同步');
-            // 页面关闭前尝试把未同步的改动 flush 掉
             window.addEventListener('beforeunload', () => {
                 if (syncer) syncer.flush();
+                if (ownerPoller) ownerPoller.stop();
             });
         }
 
         // Viewer 模式：启动轮询
         if (role === 'viewer' && shareId) {
-            initPoller();
+            initViewerPoller();
             window.addEventListener('beforeunload', () => {
-                if (poller) poller.stop();
+                if (viewerPoller) viewerPoller.stop();
             });
         }
     });

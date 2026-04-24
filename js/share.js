@@ -1,9 +1,9 @@
 /**
  * 羽毛球分享模块
  *  - URL hash 快照编解码（LZString 压缩）
- *  - Cloudflare Workers KV 存取
- *  - Owner / Viewer 角色判断（基于本地 localStorage 标记）
- *  - 带 debounce 和重试的自动同步器
+ *  - Cloudflare Workers KV 存取（含重试）
+ *  - 本地"我的对局"列表（含 owner / viewer 角色）
+ *  - 带 debounce 和重试的自动同步器 & 轮询器
  */
 (function () {
   'use strict';
@@ -12,41 +12,130 @@
   const KV_ENDPOINT = 'https://github-kv-api.homurajiang.workers.dev';
   const API_KEY = '42da0738-6e16-4024-8f92-ce920c047b59';
   const KEY_PREFIX = 'bad_match/';
-  const OWNER_STORAGE_KEY = 'badminton_owned_share_ids';
+  const MY_MATCHES_KEY = 'badminton_my_matches';
+  const LEGACY_OWNER_KEY = 'badminton_owned_share_ids';
+  const MAX_RECORDS = 50;
   const SCHEMA_VERSION = 1;
 
-  // ── Owner 标记 ─────────────────────────────────────────────────────
-  function getOwnedMap() {
+  // ── 本地"我的对局"存储（含角色） ──────────────────────────────────
+  //
+  // 结构：{ [id]: { role: 'owner' | 'viewer', addedAt: number, lastSeenAt: number } }
+  // - owner：我创建或已升级为可编辑
+  // - viewer：只读访问过（点"申请编辑权限"可升级）
+  // 容量：最多 MAX_RECORDS 条，溢出按 lastSeenAt 升序淘汰
+
+  function readMap(key) {
     try {
-      return JSON.parse(localStorage.getItem(OWNER_STORAGE_KEY) || '{}') || {};
+      return JSON.parse(localStorage.getItem(key) || '{}') || {};
     } catch (_) {
       return {};
     }
   }
 
-  function markAsOwner(id, meta) {
-    if (!id) return;
-    const m = getOwnedMap();
-    m[id] = { createdAt: Date.now(), ...(meta || {}) };
-    localStorage.setItem(OWNER_STORAGE_KEY, JSON.stringify(m));
+  let _migrated = false;
+  function getMyMatches() {
+    const map = readMap(MY_MATCHES_KEY);
+    if (!_migrated) {
+      _migrated = true;
+      const legacy = readMap(LEGACY_OWNER_KEY);
+      let changed = false;
+      for (const id of Object.keys(legacy)) {
+        if (!map[id]) {
+          const createdAt = (legacy[id] && legacy[id].createdAt) || Date.now();
+          map[id] = { role: 'owner', addedAt: createdAt, lastSeenAt: Date.now() };
+          changed = true;
+        }
+      }
+      if (changed) saveMyMatches(map);
+    }
+    return map;
   }
 
-  function removeOwnerMark(id) {
+  function saveMyMatches(map) {
+    const entries = Object.entries(map);
+    if (entries.length > MAX_RECORDS) {
+      entries.sort((a, b) => (b[1].lastSeenAt || 0) - (a[1].lastSeenAt || 0));
+      map = Object.fromEntries(entries.slice(0, MAX_RECORDS));
+    }
+    localStorage.setItem(MY_MATCHES_KEY, JSON.stringify(map));
+  }
+
+  function addOrUpdateRecord(id, role, meta) {
     if (!id) return;
-    const m = getOwnedMap();
-    if (id in m) {
-      delete m[id];
-      localStorage.setItem(OWNER_STORAGE_KEY, JSON.stringify(m));
+    const map = getMyMatches();
+    const now = Date.now();
+    const existing = map[id];
+    let finalRole = role;
+    if (existing) {
+      finalRole = existing.role === 'owner' ? 'owner' : role;
+    }
+    map[id] = {
+      ...(existing || {}),
+      role: finalRole,
+      addedAt: (existing && existing.addedAt) || now,
+      lastSeenAt: now,
+      ...(meta || {}),
+    };
+    saveMyMatches(map);
+  }
+
+  function markAsOwner(id, meta) {
+    addOrUpdateRecord(id, 'owner', meta);
+  }
+
+  function markAsViewed(id, meta) {
+    addOrUpdateRecord(id, 'viewer', meta);
+  }
+
+  function touchRecord(id) {
+    if (!id) return;
+    const map = getMyMatches();
+    if (map[id]) {
+      map[id].lastSeenAt = Date.now();
+      saveMyMatches(map);
     }
   }
 
-  function isOwner(id) {
-    if (!id) return false;
-    return !!getOwnedMap()[id];
+  function removeRecord(id) {
+    if (!id) return;
+    const map = getMyMatches();
+    if (id in map) {
+      delete map[id];
+      saveMyMatches(map);
+    }
   }
 
+  function getRole(id) {
+    if (!id) return null;
+    const map = getMyMatches();
+    return (map[id] && map[id].role) || null;
+  }
+
+  function isOwner(id) {
+    return getRole(id) === 'owner';
+  }
+
+  function isInMyMatches(id) {
+    return !!getRole(id);
+  }
+
+  function countByRole() {
+    const map = getMyMatches();
+    let owner = 0, viewer = 0;
+    for (const id of Object.keys(map)) {
+      if (map[id].role === 'owner') owner++;
+      else if (map[id].role === 'viewer') viewer++;
+    }
+    return { owner, viewer, total: owner + viewer };
+  }
+
+  // 向后兼容（旧入口还在用）
   function countOwned() {
-    return Object.keys(getOwnedMap()).length;
+    return countByRole().total;
+  }
+
+  function removeOwnerMark(id) {
+    removeRecord(id);
   }
 
   // ── 短 ID 生成：timestamp(base36) + 4 位随机 ───────────────────────
@@ -85,18 +174,25 @@
     };
   }
 
+  // URL 快照都会带上 updatedAt，加载时用来和 KV 比较"谁更新"
+  function stampSnapshot(data) {
+    if (!data) return data;
+    if (data.updatedAt) return data;
+    return { ...data, updatedAt: new Date().toISOString() };
+  }
+
   function buildShareURL({ id, data }) {
     const base = location.origin + location.pathname;
     const parts = [];
     if (id) parts.push('id=' + encodeURIComponent(id));
-    if (data) parts.push('d=' + compressData(data));
+    if (data) parts.push('d=' + compressData(stampSnapshot(data)));
     return parts.length ? base + '#' + parts.join('&') : base;
   }
 
   function updateAddressBar({ id, data }) {
     const parts = [];
     if (id) parts.push('id=' + encodeURIComponent(id));
-    if (data) parts.push('d=' + compressData(data));
+    if (data) parts.push('d=' + compressData(stampSnapshot(data)));
     const newHash = parts.length ? '#' + parts.join('&') : '';
     if (location.hash !== newHash) {
       history.replaceState(null, '', location.pathname + location.search + newHash);
@@ -129,6 +225,27 @@
     return payload;
   }
 
+  // 带指数退避重试的上传（1s → 2s → 4s），用于手动触发的场景
+  async function uploadToKVWithRetry(id, data, options) {
+    const opts = options || {};
+    const maxRetries = opts.maxRetries || 3;
+    const onAttempt = opts.onAttempt || (() => {});
+    let lastErr;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        onAttempt(i + 1, maxRetries);
+        return await uploadToKV(id, data);
+      } catch (err) {
+        lastErr = err;
+        if (i < maxRetries - 1) {
+          const backoff = 1000 * Math.pow(2, i);
+          await new Promise(r => setTimeout(r, backoff));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
   async function fetchFromKV(id) {
     const res = await fetch(kvUrl(id), {
       method: 'GET',
@@ -155,17 +272,24 @@
     return true;
   }
 
-  // 并发拉取所有"我拥有的"记录，返回 [{id, data, error}]
-  async function listOwnedRecords() {
-    const ids = Object.keys(getOwnedMap());
+  // 并发拉取所有"我的对局"（owner + viewer），返回 [{id, role, addedAt, lastSeenAt, data, error}]
+  async function listAllRecords() {
+    const map = getMyMatches();
+    const ids = Object.keys(map);
     if (ids.length === 0) return [];
     const results = await Promise.allSettled(ids.map(id => fetchFromKV(id)));
     return ids.map((id, i) => ({
       id,
+      role: map[id].role,
+      addedAt: map[id].addedAt,
+      lastSeenAt: map[id].lastSeenAt,
       data: results[i].status === 'fulfilled' ? results[i].value : null,
       error: results[i].status === 'rejected' ? results[i].reason : null,
     }));
   }
+
+  // 向后兼容（如果有地方还在用）
+  const listOwnedRecords = listAllRecords;
 
   // ── 自动同步器：debounce + 指数退避重试 ────────────────────────────
   function createSyncer({ getId, getData, callbacks = {} }) {
@@ -182,9 +306,9 @@
       if (!id || !data) return;
       try {
         callbacks.onStart && callbacks.onStart();
-        await uploadToKV(id, data);
+        const payload = await uploadToKV(id, data);
         retryCount = 0;
-        callbacks.onSuccess && callbacks.onSuccess();
+        callbacks.onSuccess && callbacks.onSuccess(payload);
       } catch (err) {
         retryCount += 1;
         callbacks.onError && callbacks.onError(err, retryCount, retryCount < MAX_RETRY);
@@ -224,11 +348,15 @@
       retryCount = 0;
     }
 
-    return { schedule, flush, cancel };
+    function hasPending() {
+      return timer !== null || retryTimer !== null;
+    }
+
+    return { schedule, flush, cancel, hasPending };
   }
 
-  // ── 轮询器：访客端定时拉取 ─────────────────────────────────────────
-  function createPoller({ getId, onUpdate, onError, intervalMs = 20000 }) {
+  // ── 轮询器：定时拉取 KV 比对并触发更新 ─────────────────────────────
+  function createPoller({ getId, onUpdate, onError, intervalMs = 20000, shouldMerge }) {
     let timer = null;
     let running = false;
     let lastPayloadStr = '';
@@ -240,10 +368,11 @@
         const data = await fetchFromKV(id);
         if (!data) return;
         const str = JSON.stringify(data);
-        if (str !== lastPayloadStr) {
-          lastPayloadStr = str;
-          onUpdate && onUpdate(data);
-        }
+        if (str === lastPayloadStr) return;
+        // 允许外部决定是否合并（例如 owner 在本地有 pending 改动时跳过）
+        if (shouldMerge && !shouldMerge(data)) return;
+        lastPayloadStr = str;
+        onUpdate && onUpdate(data);
       } catch (err) {
         onError && onError(err);
       }
@@ -280,20 +409,33 @@
     KV_ENDPOINT,
     KEY_PREFIX,
     SCHEMA_VERSION,
+    MAX_RECORDS,
     compressData,
     decompressData,
     parseHash,
     buildShareURL,
     updateAddressBar,
     generateShortId,
+    // 本地"我的对局"
+    getMyMatches,
     markAsOwner,
-    removeOwnerMark,
+    markAsViewed,
+    touchRecord,
+    removeRecord,
+    removeOwnerMark,    // 兼容旧调用
+    getRole,
     isOwner,
-    countOwned,
+    isInMyMatches,
+    countByRole,
+    countOwned,         // 兼容旧调用
+    // KV
     uploadToKV,
+    uploadToKVWithRetry,
     fetchFromKV,
     deleteFromKV,
-    listOwnedRecords,
+    listAllRecords,
+    listOwnedRecords,   // 兼容旧调用
+    // 组件
     createSyncer,
     createPoller,
   };

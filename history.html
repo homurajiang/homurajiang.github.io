@@ -156,6 +156,14 @@
             border-radius: 999px;
             font-weight: 600;
         }
+        .role-tag {
+            font-size: .7rem;
+            padding: .12rem .5rem;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+        .role-tag.owner { background: #ecfdf5; color: #047857; }
+        .role-tag.viewer { background: #f3f4f6; color: var(--gray-600); }
         .error-tag {
             font-size: .7rem;
             background: #fef2f2;
@@ -322,11 +330,17 @@
             searchBar.style.display = 'none';
             content.innerHTML = `
                 <div class="empty-state">
-                    <div class="emoji">\u{1F4ED}</div>
-                    <div class="title">还没有保存的比赛</div>
-                    <div class="desc">在结果页点击"开启云同步并分享"即可把一场比赛存到云端。</div>
-                    <a href="generate.html" class="btn btn-primary">\u{1F3AF} 生成新对阵</a>
+                    <div class="emoji">📭</div>
+                    <div class="title">还没有对局记录</div>
+                    <div class="desc">在结果页点击"开启云同步并分享"即可创建一场；打开别人分享的链接也会自动出现在这里。</div>
+                    <a href="generate.html" class="btn btn-primary">🎯 生成新对阵</a>
                 </div>`;
+        }
+
+        function roleTagHtml(role) {
+            if (role === 'owner') return `<span class="role-tag owner">我创建</span>`;
+            if (role === 'viewer') return `<span class="role-tag viewer">访问过</span>`;
+            return '';
         }
 
         function renderList(records) {
@@ -338,19 +352,19 @@
             const html = records.map(r => {
                 const d = r.data;
                 if (!d) {
-                    // KV 拉取失败 / 不存在
                     const errorMsg = r.error ? '拉取失败' : '云端已删除';
                     return `
                     <div class="record-card stale" data-id="${r.id}">
                         <div class="record-main">
                             <div class="record-title">
                                 <span style="color: var(--gray-500);">未知记录</span>
+                                ${roleTagHtml(r.role)}
                                 <span class="error-tag">${errorMsg}</span>
                             </div>
                             <div class="record-meta"><span>ID: ${r.id}</span></div>
                         </div>
                         <div class="record-actions">
-                            <button class="icon-btn delete" data-action="delete" data-id="${r.id}" title="移除">\u{1F5D1}</button>
+                            <button class="icon-btn delete" data-action="delete" data-id="${r.id}" title="从我的列表移除">🗑</button>
                         </div>
                     </div>`;
                 }
@@ -364,6 +378,7 @@
                     <div class="record-main">
                         <div class="record-title">
                             <span>${escapeHtml(title)}</span>
+                            ${roleTagHtml(r.role)}
                             <span class="mode-tag">${modeLabel(mode)}</span>
                         </div>
                         <div class="record-meta">
@@ -373,8 +388,8 @@
                         </div>
                     </div>
                     <div class="record-actions">
-                        <button class="icon-btn" data-action="share" data-id="${r.id}" title="复制分享链接">\u{1F517}</button>
-                        <button class="icon-btn delete" data-action="delete" data-id="${r.id}" title="删除">\u{1F5D1}</button>
+                        <button class="icon-btn" data-action="share" data-id="${r.id}" title="复制分享链接">🔗</button>
+                        <button class="icon-btn delete" data-action="delete" data-id="${r.id}" title="${r.role === 'owner' ? '删除（云端+本地）' : '从我的列表移除'}">🗑</button>
                     </div>
                 </div>`;
             }).join('');
@@ -397,17 +412,17 @@
             renderList(filtered);
         }
 
-        function confirmDelete(id, title) {
+        function confirmDelete({ title, message, okText = '删除' }) {
             return new Promise((resolve) => {
                 const backdrop = document.createElement('div');
                 backdrop.className = 'confirm-backdrop';
                 backdrop.innerHTML = `
                     <div class="confirm-box">
-                        <h3>确认删除？</h3>
-                        <p>"${escapeHtml(title)}" 将从云端和本地一并删除，且不可恢复。</p>
+                        <h3>${escapeHtml(title)}</h3>
+                        <p>${message}</p>
                         <div class="confirm-actions">
                             <button class="btn btn-secondary" data-r="cancel">取消</button>
-                            <button class="btn btn-danger" data-r="ok">删除</button>
+                            <button class="btn btn-danger" data-r="ok">${escapeHtml(okText)}</button>
                         </div>
                     </div>`;
                 document.body.appendChild(backdrop);
@@ -423,19 +438,29 @@
         async function handleDelete(id) {
             const rec = allRecords.find(x => x.id === id);
             const title = (rec && rec.data && rec.data.name) || `ID ${id}`;
-            const ok = await confirmDelete(id, title);
+            const isOwner = rec && rec.role === 'owner';
+            const ok = await confirmDelete({
+                title: isOwner ? '删除这场对局？' : '从列表移除？',
+                message: isOwner
+                    ? `"${escapeHtml(title)}" 将从云端和本地一并删除，所有查看者将再也打不开这个链接，且不可恢复。`
+                    : `"${escapeHtml(title)}" 将从你的本地列表移除。这是别人创建的记录，本地移除不会影响别人，你重新打开分享链接时还会再次出现。`,
+                okText: isOwner ? '删除' : '移除',
+            });
             if (!ok) return;
-            try {
-                await Share.deleteFromKV(id);
-            } catch (err) {
-                console.warn('KV 删除失败（容忍，仅移除本地）', err);
+            if (isOwner) {
+                try {
+                    await Share.deleteFromKV(id);
+                } catch (err) {
+                    console.warn('KV 删除失败（容忍，仅移除本地）', err);
+                    showToast('云端删除失败，已仅从本地列表移除', 'info');
+                }
             }
-            Share.removeOwnerMark(id);
+            Share.removeRecord(id);
             allRecords = allRecords.filter(x => x.id !== id);
             updateSubtitle();
             if (allRecords.length === 0) renderEmpty();
             else applyFilter();
-            showToast('记录已删除', 'success');
+            showToast(isOwner ? '记录已删除' : '已从列表移除', 'success');
         }
 
         async function handleShare(id) {
@@ -467,18 +492,21 @@
 
         function updateSubtitle() {
             const n = allRecords.length;
+            const owner = allRecords.filter(r => r.role === 'owner').length;
+            const viewer = allRecords.filter(r => r.role === 'viewer').length;
             const errorCount = allRecords.filter(r => !r.data).length;
             if (n === 0) {
                 subtitle.textContent = '暂无记录';
-            } else if (errorCount > 0) {
-                subtitle.textContent = `共 ${n} 条记录（其中 ${errorCount} 条云端不可用）`;
-            } else {
-                subtitle.textContent = `共 ${n} 条记录`;
+                return;
             }
+            let base = `共 ${n} 场 · 我创建 ${owner} · 访问过 ${viewer}`;
+            if (errorCount > 0) base += ` · ${errorCount} 条云端不可用`;
+            subtitle.textContent = base;
         }
 
         // ── 初始加载 ────────────────────────────────────────────────
-        if (Share.countOwned() === 0) {
+        const counts = Share.countByRole();
+        if (counts.total === 0) {
             subtitle.textContent = '暂无记录';
             renderEmpty();
             return;
@@ -486,10 +514,10 @@
 
         let records;
         try {
-            records = await Share.listOwnedRecords();
+            records = await Share.listAllRecords();
         } catch (err) {
             console.error(err);
-            content.innerHTML = `<div class="empty-state"><div class="emoji">\u26A0\uFE0F</div><div class="title">加载失败</div><div class="desc">${escapeHtml(err.message || String(err))}</div></div>`;
+            content.innerHTML = `<div class="empty-state"><div class="emoji">⚠️</div><div class="title">加载失败</div><div class="desc">${escapeHtml(err.message || String(err))}</div></div>`;
             return;
         }
         // 按更新时间降序

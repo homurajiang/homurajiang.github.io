@@ -178,12 +178,15 @@
     <script src="js/share.js"></script>
     <script>
         (function () {
-            const n = BadmintonShare.countOwned();
+            const { owner, viewer, total } = BadmintonShare.countByRole();
             const desc = document.getElementById('hist-desc');
             const badge = document.getElementById('hist-badge');
-            if (n > 0) {
-                desc.textContent = `已保存 ${n} 场比赛`;
-                badge.textContent = n > 99 ? '99+' : String(n);
+            if (total > 0) {
+                const parts = [];
+                if (owner > 0) parts.push(`我创建 ${owner}`);
+                if (viewer > 0) parts.push(`访问过 ${viewer}`);
+                desc.textContent = parts.join(' · ');
+                badge.textContent = total > 99 ? '99+' : String(total);
                 badge.style.display = '';
             } else {
                 desc.textContent = '暂无记录';
