@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>生成对阵 · 羽毛球对阵生成器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+            --shadow-lg: 0 4px 6px rgba(0,0,0,.07), 0 12px 28px rgba(0,0,0,.08);
+            --transition: .25s cubic-bezier(.4,0,.2,1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #fdf2f8 100%);
+            color: var(--gray-800);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            animation: fadeUp .5s ease-out;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); max-height: 0; }
+            to { opacity: 1; transform: translateY(0); max-height: 100px; }
+        }
+
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(30px); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header p {
+            color: var(--gray-500);
+            margin-top: .5rem;
+            font-size: .95rem;
+        }
+
+        .card {
+            background: rgba(255,255,255,.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.6);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+            transition: box-shadow var(--transition);
+        }
+        .card:hover { box-shadow: var(--shadow-lg); }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+        .card-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.1em;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        /* ── Player List ─────────────────── */
+        #players-list { display: flex; flex-direction: column; gap: .5rem; }
+
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .6rem .75rem;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            transition: all var(--transition);
+            animation: slideIn .3s ease-out forwards;
+        }
+        .player-row:hover { border-color: var(--primary-light); background: #fff; }
+        .player-row.removing {
+            animation: slideOut .25s ease-in forwards;
+        }
+
+        .player-num {
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--gray-400);
+            min-width: 1.5rem;
+            text-align: center;
+        }
+
+        .player-row input[type="text"] {
+            flex: 1;
+            padding: .45rem .6rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            font-size: .95rem;
+            outline: none;
+            transition: border-color var(--transition), box-shadow var(--transition);
+            background: #fff;
+        }
+        .player-row input[type="text"]:focus {
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+        }
+
+        .gender-toggle {
+            display: flex;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--gray-200);
+            flex-shrink: 0;
+        }
+        .gender-toggle input { display: none; }
+        .gender-toggle label {
+            padding: .35rem .65rem;
+            font-size: .85rem;
+            cursor: pointer;
+            transition: all var(--transition);
+            background: #fff;
+            color: var(--gray-500);
+            user-select: none;
+        }
+        .gender-toggle input:checked + label {
+            background: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .btn-remove {
+            width: 28px; height: 28px;
+            border: none;
+            background: transparent;
+            color: var(--gray-400);
+            cursor: pointer;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .btn-remove:hover { background: #fef2f2; color: var(--danger); }
+
+        .player-actions {
+            display: flex;
+            gap: .5rem;
+            margin-top: .75rem;
+        }
+
+        /* ── Buttons ─────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .4rem;
+            padding: .55rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: .9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+        }
+        .btn:active { transform: scale(.97); }
+
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+        .btn-secondary:hover { background: var(--gray-200); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(99,102,241,.3);
+        }
+        .btn-primary:hover {
+            box-shadow: 0 4px 14px rgba(99,102,241,.4);
+            transform: translateY(-1px);
+        }
+        .btn-primary:active { transform: translateY(0) scale(.98); }
+        .btn-primary:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-danger-outline {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid #fca5a5;
+        }
+        .btn-danger-outline:hover { background: #fef2f2; }
+
+        .btn-generate {
+            width: 100%;
+            padding: .8rem;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: .5rem;
+        }
+
+        /* ── Mode & K Select ─────────────── */
+        .mode-group {
+            display: flex;
+            gap: .5rem;
+        }
+        .mode-group input { display: none; }
+        .mode-group label {
+            flex: 1;
+            text-align: center;
+            padding: .6rem;
+            border-radius: var(--radius-sm);
+            border: 2px solid var(--gray-200);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: .9rem;
+            transition: all var(--transition);
+            color: var(--gray-500);
+            background: #fff;
+        }
+        .mode-group input:checked + label {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #eef2ff;
+        }
+        .mode-group label:hover {
+            border-color: var(--primary-light);
+        }
+
+        .settings-row {
+            display: flex;
+            gap: .75rem;
+            margin-top: .75rem;
+        }
+        .settings-row > * { flex: 1; }
+
+        .k-select-wrap { position: relative; }
+        .k-select-wrap select {
+            width: 100%;
+            padding: .6rem .75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: .95rem;
+            background: #fff;
+            appearance: none;
+            -webkit-appearance: none;
+            outline: none;
+            cursor: pointer;
+            transition: border-color var(--transition);
+        }
+        .k-select-wrap select:focus { border-color: var(--primary-light); }
+        .k-select-wrap::after {
+            content: '▾';
+            position: absolute;
+            right: .75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+            pointer-events: none;
+        }
+
+        .name-input-wrap input {
+            width: 100%;
+            padding: .6rem .75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: .95rem;
+            background: #fff;
+            outline: none;
+            transition: border-color var(--transition);
+        }
+        .name-input-wrap input:focus { border-color: var(--primary-light); }
+        .name-input-wrap input::placeholder { color: var(--gray-400); }
+
+        .field-label {
+            display: block;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            margin-bottom: .35rem;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+        }
+
+        /* ── History ─────────────────────── */
+        .history-list { list-style: none; }
+        .history-list li {
+            margin-bottom: .4rem;
+        }
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .7rem .9rem;
+            border-radius: var(--radius-sm);
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            transition: all var(--transition);
+        }
+        .history-item:hover {
+            background: #eef2ff;
+            border-color: var(--primary-light);
+        }
+        .history-item a {
+            flex: 1;
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: .9rem;
+            cursor: pointer;
+        }
+        .history-item a:hover {
+            color: var(--primary);
+        }
+        .history-delete {
+            width: 24px; height: 24px;
+            border: none;
+            background: transparent;
+            color: var(--gray-400);
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .85rem;
+            transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .history-delete:hover { background: #fef2f2; color: var(--danger); }
+        .history-empty {
+            text-align: center;
+            color: var(--gray-400);
+            font-size: .9rem;
+            padding: 1.5rem 0;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Toast ────────────────────────── */
+        .toast-container {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+        .toast {
+            padding: .75rem 1.25rem;
+            border-radius: var(--radius-sm);
+            font-size: .9rem;
+            font-weight: 500;
+            color: #fff;
+            box-shadow: var(--shadow-lg);
+            animation: toastIn .3s ease-out;
+            cursor: pointer;
+        }
+        .toast.error { background: var(--danger); }
+        .toast.success { background: var(--success); }
+        .toast.removing { animation: toastOut .25s ease-in forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { to { opacity: 0; transform: translateX(40px); } }
+
+        @media (max-width: 640px) {
+            body { padding: 1rem .5rem; }
+            .container { max-width: 100%; }
+            .card { padding: 1rem; }
+            .mode-group { flex-direction: column; }
+            .settings-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="container">
+        <div style="margin-bottom: 1rem;">
+            <a href="index.html" class="btn btn-secondary" style="font-size: .85rem;">← 返回首页</a>
+        </div>
+        <div class="header">
+            <h1>生成新对阵</h1>
+            <p>输入队员 · 选择模式 · 一键生成</p>
+        </div>
+
+        <form id="main-form">
+            <div class="card">
+                <div class="card-title">队员列表</div>
+                <div id="players-list"></div>
+                <div class="player-actions">
+                    <button type="button" class="btn btn-secondary" id="add-player">+ 添加队员</button>
+                    <button type="button" class="btn btn-secondary" id="clear-players">清空列表</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">比赛设置</div>
+                <div class="mode-group">
+                    <input type="radio" id="mode-random" name="mode" value="random_doubles" checked>
+                    <label for="mode-random">随机双打</label>
+                    <input type="radio" id="mode-mixed" name="mode" value="mixed">
+                    <label for="mode-mixed">混合双打</label>
+                    <input type="radio" id="mode-singles" name="mode" value="singles_robin">
+                    <label for="mode-singles">单打轮转</label>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <span class="field-label">每人对局数</span>
+                        <div class="k-select-wrap">
+                            <select name="k" id="k-select" required></select>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="field-label">对局名称（可选）</span>
+                        <div class="name-input-wrap">
+                            <input type="text" id="match-name" placeholder="例如：周三晚场">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-generate" id="submit-btn">
+                生成对阵
+            </button>
+        </form>
+    </div>
+
+    <script src="js/matching.js"></script>
+    <script>
+        const playersList = document.getElementById('players-list');
+        const addPlayerBtn = document.getElementById('add-player');
+        const clearPlayersBtn = document.getElementById('clear-players');
+        const kSelect = document.getElementById('k-select');
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        const mainForm = document.getElementById('main-form');
+        const submitBtn = document.getElementById('submit-btn');
+        let playerCount = 0;
+
+        const DB_KEYS = { PLAYERS: 'badminton_players' };
+
+        // ── Toast ────────────────────────────────────────────────────
+        function showToast(message, type = 'error') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            toast.addEventListener('click', () => removeToast(toast));
+            setTimeout(() => removeToast(toast), 3000);
+        }
+        function removeToast(toast) {
+            if (toast.classList.contains('removing')) return;
+            toast.classList.add('removing');
+            toast.addEventListener('animationend', () => toast.remove());
+        }
+
+        // ── Players ──────────────────────────────────────────────────
+        function savePlayers() {
+            localStorage.setItem(DB_KEYS.PLAYERS, JSON.stringify(getPlayersData()));
+        }
+
+        function loadPlayers() {
+            const saved = localStorage.getItem(DB_KEYS.PLAYERS);
+            if (saved) {
+                try {
+                    const players = JSON.parse(saved);
+                    if (players && players.length > 0) {
+                        players.forEach(p => addPlayer(p.name, p.gender));
+                        return;
+                    }
+                } catch (_) {}
+            }
+            for (let i = 0; i < 6; i++) addPlayer();
+        }
+
+        function createPlayerRow(id, name = '', gender = 'M') {
+            const div = document.createElement('div');
+            div.className = 'player-row';
+            div.innerHTML = `
+                <span class="player-num">${id + 1}</span>
+                <input type="text" placeholder="输入队员姓名" value="${name}" required>
+                <div class="gender-toggle">
+                    <input type="radio" id="g-m-${id}" name="pg-${id}" value="M" ${gender === 'M' ? 'checked' : ''}>
+                    <label for="g-m-${id}">男</label>
+                    <input type="radio" id="g-f-${id}" name="pg-${id}" value="F" ${gender === 'F' ? 'checked' : ''}>
+                    <label for="g-f-${id}">女</label>
+                </div>
+                <button type="button" class="btn-remove" title="删除">&times;</button>`;
+            return div;
+        }
+
+        function addPlayer(name = '', gender = 'M') {
+            const row = createPlayerRow(playerCount, name, gender);
+            playersList.appendChild(row);
+            playerCount++;
+            renumberPlayers();
+            updateKOptions();
+        }
+
+        function renumberPlayers() {
+            const rows = playersList.querySelectorAll('.player-row');
+            rows.forEach((row, i) => {
+                row.querySelector('.player-num').textContent = i + 1;
+            });
+        }
+
+        function getPlayersData() {
+            const players = [];
+            playersList.querySelectorAll('.player-row').forEach(row => {
+                const nameInput = row.querySelector('input[type="text"]');
+                const genderInput = row.querySelector('input[type="radio"]:checked');
+                if (nameInput && nameInput.value.trim() && genderInput) {
+                    players.push({ name: nameInput.value.trim(), gender: genderInput.value });
+                }
+            });
+            return players;
+        }
+
+        function updateKOptions() {
+            const players = getPlayersData();
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const options = Matching.getPossibleK(players, mode);
+
+            kSelect.innerHTML = '';
+            if (options.length > 0) {
+                options.forEach(k => {
+                    const opt = document.createElement('option');
+                    opt.value = k;
+                    opt.textContent = `每人 ${k} 局`;
+                    kSelect.appendChild(opt);
+                });
+            } else {
+                const opt = document.createElement('option');
+                opt.value = '';
+                const minPlayers = mode === 'singles_robin' ? 2 : 4;
+                opt.textContent = players.length < minPlayers ? `队员不足（至少${minPlayers}人）` : '无可用局数';
+                kSelect.appendChild(opt);
+            }
+        }
+
+        // ── Form Submit ──────────────────────────────────────────────
+        mainForm.addEventListener('submit', e => {
+            e.preventDefault();
+            const players = getPlayersData();
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const k = parseInt(kSelect.value, 10);
+            const matchName = document.getElementById('match-name').value.trim();
+
+            const minPlayers = mode === 'singles_robin' ? 2 : 4;
+            if (players.length < minPlayers) {
+                showToast(`队员人数不足，至少需要${minPlayers}人`);
+                return;
+            }
+            if (!k || isNaN(k)) {
+                showToast('请选择有效的每人对局数');
+                return;
+            }
+
+            const nameSet = new Set(players.map(p => p.name));
+            if (nameSet.size !== players.length) {
+                showToast('存在重复的队员姓名，请修改');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner"></span> 生成中...';
+
+            setTimeout(() => {
+                try {
+                    const matches = Matching.generate(players, mode, k);
+                    const result = {
+                        matches,
+                        players,
+                        params: { mode, k },
+                        name: matchName || ''
+                    };
+                    sessionStorage.setItem('current_match_data', JSON.stringify(result));
+                    window.location.href = 'result.html';
+                } catch (err) {
+                    showToast(err.message || '生成失败，请重试');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '生成对阵';
+                }
+            }, 100);
+        });
+
+        // ── Event Listeners ──────────────────────────────────────────
+        playersList.addEventListener('click', e => {
+            if (e.target.closest('.btn-remove')) {
+                const row = e.target.closest('.player-row');
+                row.classList.add('removing');
+                row.addEventListener('animationend', () => {
+                    row.remove();
+                    renumberPlayers();
+                    savePlayers();
+                    updateKOptions();
+                });
+            }
+        });
+
+        playersList.addEventListener('input', () => { savePlayers(); updateKOptions(); });
+        playersList.addEventListener('change', () => { savePlayers(); updateKOptions(); });
+        modeRadios.forEach(r => r.addEventListener('change', updateKOptions));
+
+        addPlayerBtn.addEventListener('click', () => { addPlayer(); savePlayers(); });
+        clearPlayersBtn.addEventListener('click', () => {
+            playersList.innerHTML = '';
+            playerCount = 0;
+            localStorage.removeItem(DB_KEYS.PLAYERS);
+            for (let i = 0; i < 6; i++) addPlayer();
+            savePlayers();
+        });
+
+        loadPlayers();
+    </script>
+</body>
+</html>

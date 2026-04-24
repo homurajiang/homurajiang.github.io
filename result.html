@@ -354,6 +354,113 @@
         .error-page h1 { margin-bottom: 1rem; }
         .error-page p { color: var(--danger); font-size: 1.1rem; margin-bottom: 1.5rem; }
 
+        /* ── Share / Sync UI ─────────────── */
+        .role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            font-size: .72rem;
+            font-weight: 600;
+            padding: .2rem .55rem;
+            border-radius: 999px;
+            letter-spacing: .3px;
+            margin-left: .5rem;
+            vertical-align: middle;
+        }
+        .role-badge.viewer { background: #eef2ff; color: #4338ca; }
+        .role-badge.owner  { background: #ecfdf5; color: #047857; }
+
+        .sync-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            font-size: .8rem;
+            color: var(--gray-500);
+            margin-bottom: .75rem;
+            flex-wrap: wrap;
+        }
+        .sync-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--gray-300);
+            flex-shrink: 0;
+        }
+        .sync-dot.syncing { background: var(--accent); animation: pulse-dot 1s ease-in-out infinite; }
+        .sync-dot.ok      { background: var(--success); }
+        .sync-dot.error   { background: var(--danger); }
+        @keyframes pulse-dot { 50% { opacity: .4; } }
+
+        .sync-bar .btn-link {
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: .8rem;
+            cursor: pointer;
+            padding: .15rem .3rem;
+            border-radius: 4px;
+        }
+        .sync-bar .btn-link:hover { background: #eef2ff; }
+
+        .share-modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(17, 24, 39, .45);
+            display: flex; align-items: center; justify-content: center;
+            padding: 1rem;
+            z-index: 10000;
+            animation: fadeIn .2s ease-out;
+        }
+        .share-modal {
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 1.5rem;
+            max-width: 520px;
+            width: 100%;
+            animation: fadeUp .25s ease-out;
+        }
+        .share-modal h3 {
+            font-size: 1.05rem;
+            margin-bottom: .5rem;
+            color: var(--gray-800);
+        }
+        .share-modal p { font-size: .85rem; color: var(--gray-500); margin-bottom: .9rem; line-height: 1.5; }
+        .share-modal .link-box {
+            display: flex;
+            gap: .5rem;
+            margin-bottom: 1rem;
+        }
+        .share-modal input[type="text"] {
+            flex: 1;
+            padding: .55rem .75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: .82rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: var(--gray-50);
+            min-width: 0;
+        }
+        .share-modal .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: .5rem;
+        }
+
+        .viewer-readonly-hint {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: var(--radius-sm);
+            padding: .55rem 1rem;
+            margin-bottom: 1rem;
+            font-size: .82rem;
+            color: #4338ca;
+            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
         @media (max-width: 768px) {
             .page-container { flex-direction: column; }
             .stats-panel { position: static; width: 100%; }
@@ -367,24 +474,63 @@
     <div class="toast-container" id="toast-container"></div>
     <div id="root"></div>
 
+    <script src="js/lz-string.min.js"></script>
     <script src="js/matching.js"></script>
+    <script src="js/share.js"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         const root = document.getElementById('root');
-        const dataString = sessionStorage.getItem('current_match_data');
+        const Share = window.BadmintonShare;
 
-        if (!dataString) {
+        // ── 数据源优先级：URL#id > URL#d > sessionStorage ─────────
+        const { id: urlId, d: urlSnapshot } = Share.parseHash();
+        let shareId = urlId || null;
+        let role = 'local';       // 'local' | 'owner' | 'viewer'
+        let matches, players, params, matchName = '';
+        let data;
+        let loadError = null;
+
+        if (shareId) {
+            // 分享链接：先尝试 KV，拉不到回退快照
+            try {
+                const remote = await Share.fetchFromKV(shareId);
+                if (remote) {
+                    data = remote;
+                } else if (urlSnapshot) {
+                    data = Share.decompressData(urlSnapshot);
+                }
+            } catch (err) {
+                console.warn('KV 读取失败，尝试使用 URL 快照', err);
+                if (urlSnapshot) data = Share.decompressData(urlSnapshot);
+                else loadError = err;
+            }
+            role = Share.isOwner(shareId) ? 'owner' : 'viewer';
+        } else if (urlSnapshot) {
+            // 纯快照链接（没有 id）
+            data = Share.decompressData(urlSnapshot);
+            role = 'viewer'; // 快照链接默认只读
+        } else {
+            // 来自本地首页生成
+            const dataString = sessionStorage.getItem('current_match_data');
+            if (dataString) {
+                try { data = JSON.parse(dataString); } catch (_) {}
+            }
+            role = 'local';
+        }
+
+        if (!data) {
             root.innerHTML = `<div class="error-page card" style="margin-top:3rem;">
                 <h1 style="background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">数据丢失</h1>
-                <p>没有找到对局数据，请返回首页重新生成。</p>
+                <p>${loadError ? '无法加载分享的数据（可能云端已过期）。' : '没有找到对局数据，请返回首页重新生成。'}</p>
                 <a href="index.html" class="btn btn-primary">返回首页</a>
             </div>`;
             return;
         }
 
-        const data = JSON.parse(dataString);
-        let { matches, players, params, id: historyId, name: matchName } = data;
-        const DB_HISTORY_KEY = 'badminton_history';
+        matches = data.matches || [];
+        players = data.players || [];
+        params = data.params || null;
+        matchName = data.name || '';
 
         function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
@@ -396,27 +542,190 @@
             setTimeout(() => { if (toast.parentElement) { toast.classList.add('removing'); toast.addEventListener('animationend', () => toast.remove()); } }, 3000);
         }
 
+        // ── 工具：获取当前可分享的数据快照 ────────────────────────
+        function currentPayload() {
+            return { matches, players, params, name: matchName };
+        }
+
+        // ── 同步状态 UI ────────────────────────────────────────────
+        let syncStatus = { state: 'idle', text: '' }; // state: idle|syncing|ok|error
+
+        function setSyncStatus(state, text) {
+            syncStatus = { state, text };
+            const bar = document.getElementById('sync-bar');
+            if (!bar) return;
+            const dot = bar.querySelector('.sync-dot');
+            const label = bar.querySelector('.sync-label');
+            if (dot) dot.className = 'sync-dot ' + (state === 'idle' ? '' : state);
+            if (label) label.textContent = text;
+        }
+
+        // ── 同步器（Owner 模式才会初始化） ─────────────────────────
+        let syncer = null;
+        function initSyncer() {
+            if (syncer || !shareId || role !== 'owner') return;
+            syncer = Share.createSyncer({
+                getId: () => shareId,
+                getData: currentPayload,
+                callbacks: {
+                    onStart: () => setSyncStatus('syncing', '正在同步…'),
+                    onSuccess: () => {
+                        setSyncStatus('ok', '已同步 · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
+                        // 每次同步后也刷新 URL 中的快照，保证复制的链接是最新的
+                        Share.updateAddressBar({ id: shareId, data: currentPayload() });
+                    },
+                    onError: (err, n, willRetry) => {
+                        console.warn('同步失败', err);
+                        setSyncStatus('error', willRetry ? `同步失败，正在重试 (${n}/3)…` : '同步失败，请检查网络');
+                    },
+                },
+            });
+        }
+
+        // ── 轮询器（Viewer 模式才会初始化） ────────────────────────
+        let poller = null;
+        function initPoller() {
+            if (poller || !shareId || role !== 'viewer') return;
+            poller = Share.createPoller({
+                getId: () => shareId,
+                intervalMs: 20000,
+                onUpdate: (remote) => {
+                    matches = remote.matches || [];
+                    players = remote.players || [];
+                    params = remote.params || null;
+                    matchName = remote.name || matchName;
+                    render();
+                    const t = remote.updatedAt ? new Date(remote.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+                    showToast(t ? `已更新到最新数据（${t}）` : '已更新到最新数据', 'info');
+                },
+                onError: (err) => console.warn('轮询失败', err),
+            });
+            poller.setBaseline(data); // 首次加载的数据作为基线，避免误报"有更新"
+            poller.start();
+        }
+
+        // ── 分享弹窗 ───────────────────────────────────────────────
+        function openShareModal(url, titleText, description) {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'share-modal-backdrop';
+            backdrop.innerHTML = `
+                <div class="share-modal" role="dialog">
+                    <h3>${titleText}</h3>
+                    <p>${description}</p>
+                    <div class="link-box">
+                        <input type="text" id="share-url-input" readonly value="${url.replace(/"/g, '&quot;')}">
+                        <button class="btn btn-primary" id="share-copy-btn">复制</button>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="share-close-btn">关闭</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(backdrop);
+            const input = backdrop.querySelector('#share-url-input');
+            input.focus();
+            input.select();
+            backdrop.querySelector('#share-copy-btn').addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(url);
+                    showToast('链接已复制到剪贴板', 'success');
+                } catch (_) {
+                    input.select();
+                    document.execCommand('copy');
+                    showToast('链接已复制', 'success');
+                }
+            });
+            backdrop.querySelector('#share-close-btn').addEventListener('click', () => backdrop.remove());
+            backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+        }
+
+        // ── 开启云同步 ─────────────────────────────────────────────
+        async function enableCloudSync() {
+            const btn = document.getElementById('cloud-share-btn');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 上传中...'; }
+            try {
+                const newId = Share.generateShortId();
+                await Share.uploadToKV(newId, currentPayload());
+                Share.markAsOwner(newId);
+                shareId = newId;
+                role = 'owner';
+                Share.updateAddressBar({ id: shareId, data: currentPayload() });
+                render();
+                initSyncer();
+                setSyncStatus('ok', '已同步 · 刚刚');
+                const url = Share.buildShareURL({ id: shareId, data: currentPayload() });
+                openShareModal(url, '已保存到比赛历史 · 云同步已开启',
+                    '这场比赛已保存到"比赛历史"（可在首页打开）。以下链接可以分享给别人，你之后改动比分或对阵，对方刷新即可看到最新。');
+            } catch (err) {
+                console.error(err);
+                showToast('上传失败：' + (err.message || err), 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '\u2601 开启云同步并分享'; }
+            }
+        }
+
+        // ── 复制纯快照分享链接 ─────────────────────────────────────
+        function copySnapshotShare() {
+            const url = Share.buildShareURL({ id: shareId, data: currentPayload() });
+            openShareModal(url,
+                shareId ? '分享链接' : '快照分享链接',
+                shareId
+                    ? '该链接指向云端最新数据；若云端不可达，也会自动回退到链接里内嵌的快照。'
+                    : '链接里直接内嵌了对阵快照，对方打开即可查看。若之后改动比分，需要重新复制链接才能让对方看到新的状态。');
+        }
+
+        // ── 渲染 ───────────────────────────────────────────────────
         function render() {
             const hasRelaxed = matches.some(m => m.type === 'relaxed');
             const isSingles = params && params.mode === 'singles_robin';
             const pageTitle = matchName || '对阵结果';
+            const isViewer = role === 'viewer';
+            const isOwner = role === 'owner';
+            const canEdit = !isViewer;
+
+            const roleBadgeHtml = isViewer
+                ? `<span class="role-badge viewer">\u{1F441} 访客视图</span>`
+                : (isOwner ? `<span class="role-badge owner">\u{2601} 云同步中</span>` : '');
+
+            const topActions = isViewer ? `
+                    ${shareId ? `<button class="btn btn-secondary" id="viewer-refresh-btn">\u21BB 刷新</button>` : ''}
+                    <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                ` : `
+                    ${params ? `<button class="btn btn-accent" id="refresh-btn">\u21BB 重新生成</button>` : ''}
+                    <button class="btn btn-primary" id="shuffle-btn">\u2195 重排对局顺序</button>
+                    ${shareId
+                        ? `<button class="btn btn-primary" id="share-copy-link-btn">\u{1F517} 复制分享链接</button>`
+                        : `<button class="btn btn-success" id="cloud-share-btn">\u{2601} 开启云同步并分享</button>
+                           <button class="btn btn-secondary" id="share-copy-link-btn">\u{1F517} 复制快照链接</button>`
+                    }
+                    <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                `;
+
+            const syncBarHtml = (isOwner && shareId) ? `
+                <div class="sync-bar" id="sync-bar">
+                    <span class="sync-dot ${syncStatus.state}"></span>
+                    <span class="sync-label">${syncStatus.text || '已开启云同步'}</span>
+                    <button class="btn-link" id="sync-now-btn">立即同步</button>
+                </div>` : '';
+
+            const viewerHintHtml = isViewer ? `
+                <div class="viewer-readonly-hint">
+                    \u{1F441} 你正在以访客模式查看他人分享的对阵，此页面只读。${shareId ? '页面会每 20 秒自动拉取最新数据。' : '这是分享时的静态快照。'}
+                </div>` : '';
 
             root.innerHTML = `
             <div class="page-container">
                 <div class="main-panel">
                     <div class="header">
-                        <h1>${pageTitle}</h1>
+                        <h1>${pageTitle}${roleBadgeHtml}</h1>
                         ${matchName ? `<p>${matches.length} 场对局 · ${players.length} 位选手</p>` : ''}
                     </div>
                     <div class="top-actions">
-                        ${params ? `<button class="btn btn-accent" id="refresh-btn">\u21BB 重新生成</button>` : ''}
-                        <button class="btn btn-primary" id="shuffle-btn">\u2195 随机排序</button>
-                        <button class="btn btn-success" id="save-btn">${historyId ? '更新记录' : '保存记录'}</button>
-                        <a href="index.html" class="btn btn-secondary">\u2190 返回首页</a>
+                        ${topActions}
                     </div>
+                    ${syncBarHtml}
+                    ${viewerHintHtml}
                     ${hasRelaxed ? `<div class="info-banner">由于男女人数不等，部分对局采用放松配对（标有"非标准混双"标记），确保每人对局数一致。不会出现男双 vs 女双的情况。</div>` : ''}
                     <div class="match-list" id="match-list">
-                        ${matches.map((match, i) => renderMatchCard(match, i, isSingles)).join('')}
+                        ${matches.map((match, i) => renderMatchCard(match, i, isSingles, canEdit)).join('')}
                     </div>
                 </div>
                 <div class="stats-panel card">
@@ -442,13 +751,21 @@
             updateStats();
         }
 
-        function renderMatchCard(match, index, isSingles) {
+        function renderMatchCard(match, index, isSingles, canEdit) {
             const isRelaxed = match.type === 'relaxed';
             const team1Text = match.team1.join(' & ');
             const team2Text = match.team2.join(' & ');
             const scoreText = (match.score && match.score.team1 != null)
                 ? `${match.score.team1} : ${match.score.team2}`
                 : '\u2014 : \u2014';
+            const scoreControls = canEdit ? `
+                    <div class="score-input">
+                        <input type="number" class="s1" min="0" value="0">
+                        <span class="sep">:</span>
+                        <input type="number" class="s2" min="0" value="0">
+                    </div>
+                    <button class="btn-score edit-btn">比分</button>
+                    <button class="btn-score save save-score-btn" style="display:none">保存</button>` : '';
             return `
             <div class="match-card ${isRelaxed ? 'relaxed-match' : ''}" data-index="${index}" style="animation-delay:${index * 0.06}s">
                 <div class="match-index"><span>${index + 1}</span></div>
@@ -460,59 +777,61 @@
                 </div>
                 <div class="score-area">
                     <div class="score-display">${scoreText}</div>
-                    <div class="score-input">
-                        <input type="number" class="s1" min="0" value="0">
-                        <span class="sep">:</span>
-                        <input type="number" class="s2" min="0" value="0">
-                    </div>
-                    <button class="btn-score edit-btn">比分</button>
-                    <button class="btn-score save save-score-btn" style="display:none">保存</button>
+                    ${scoreControls}
                 </div>
             </div>`;
         }
 
         function attachEvents() {
-            document.getElementById('match-list').addEventListener('click', e => {
-                const card = e.target.closest('.match-card');
-                if (!card) return;
-                const idx = parseInt(card.dataset.index, 10);
+            const canEdit = role !== 'viewer';
 
-                if (e.target.classList.contains('edit-btn')) {
-                    const disp = card.querySelector('.score-display');
-                    const inp = card.querySelector('.score-input');
-                    const editBtn = card.querySelector('.edit-btn');
-                    const saveBtn = card.querySelector('.save-score-btn');
-                    disp.style.display = 'none';
-                    inp.style.display = 'flex';
-                    editBtn.style.display = 'none';
-                    saveBtn.style.display = 'inline-flex';
-                    const sc = matches[idx].score || { team1: 0, team2: 0 };
-                    card.querySelector('.s1').value = sc.team1 || 0;
-                    card.querySelector('.s2').value = sc.team2 || 0;
-                    card.querySelector('.s1').focus();
-                } else if (e.target.classList.contains('save-score-btn')) {
-                    const s1 = parseInt(card.querySelector('.s1').value, 10) || 0;
-                    const s2 = parseInt(card.querySelector('.s2').value, 10) || 0;
-                    matches[idx].score = { team1: s1, team2: s2 };
-                    card.querySelector('.score-display').textContent = `${s1} : ${s2}`;
-                    card.querySelector('.score-display').style.display = '';
-                    card.querySelector('.score-input').style.display = 'none';
-                    card.querySelector('.edit-btn').style.display = '';
-                    card.querySelector('.save-score-btn').style.display = 'none';
-                    card.classList.add('saved');
-                    setTimeout(() => card.classList.remove('saved'), 700);
-                    updateStats();
-                }
-            });
+            // 比分编辑（仅可编辑模式）
+            if (canEdit) {
+                document.getElementById('match-list').addEventListener('click', e => {
+                    const card = e.target.closest('.match-card');
+                    if (!card) return;
+                    const idx = parseInt(card.dataset.index, 10);
 
-            document.getElementById('shuffle-btn').addEventListener('click', () => {
-                for (let i = matches.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [matches[i], matches[j]] = [matches[j], matches[i]];
-                }
-                render();
-                showToast('对局顺序已重新排列', 'info');
-            });
+                    if (e.target.classList.contains('edit-btn')) {
+                        const disp = card.querySelector('.score-display');
+                        const inp = card.querySelector('.score-input');
+                        const editBtn = card.querySelector('.edit-btn');
+                        const saveBtn = card.querySelector('.save-score-btn');
+                        disp.style.display = 'none';
+                        inp.style.display = 'flex';
+                        editBtn.style.display = 'none';
+                        saveBtn.style.display = 'inline-flex';
+                        const sc = matches[idx].score || { team1: 0, team2: 0 };
+                        card.querySelector('.s1').value = sc.team1 || 0;
+                        card.querySelector('.s2').value = sc.team2 || 0;
+                        card.querySelector('.s1').focus();
+                    } else if (e.target.classList.contains('save-score-btn')) {
+                        const s1 = parseInt(card.querySelector('.s1').value, 10) || 0;
+                        const s2 = parseInt(card.querySelector('.s2').value, 10) || 0;
+                        matches[idx].score = { team1: s1, team2: s2 };
+                        card.querySelector('.score-display').textContent = `${s1} : ${s2}`;
+                        card.querySelector('.score-display').style.display = '';
+                        card.querySelector('.score-input').style.display = 'none';
+                        card.querySelector('.edit-btn').style.display = '';
+                        card.querySelector('.save-score-btn').style.display = 'none';
+                        card.classList.add('saved');
+                        setTimeout(() => card.classList.remove('saved'), 700);
+                        updateStats();
+                        if (syncer) syncer.schedule();
+                    }
+                });
+            }
+
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            if (shuffleBtn) {
+                shuffleBtn.addEventListener('click', () => {
+                    // 约束下重排：尽量不让任何人连续出场 > 3 场
+                    matches = Matching.reorderWithConsecutiveLimit(matches, 3);
+                    render();
+                    showToast('对局顺序已重新排列（已考虑体力均衡）', 'info');
+                    if (syncer) syncer.schedule();
+                });
+            }
 
             const refreshBtn = document.getElementById('refresh-btn');
             if (refreshBtn) {
@@ -524,9 +843,9 @@
                         try {
                             matches = Matching.generate(players, params.mode, params.k);
                             sessionStorage.setItem('current_match_data', JSON.stringify({ matches, players, params, name: matchName }));
-                            historyId = null;
                             render();
                             showToast('已重新生成对阵', 'success');
+                            if (syncer) syncer.schedule();
                         } catch (err) {
                             showToast(err.message || '生成失败', 'error');
                         } finally {
@@ -537,31 +856,40 @@
                 });
             }
 
-            document.getElementById('save-btn').addEventListener('click', () => {
-                const history = JSON.parse(localStorage.getItem(DB_HISTORY_KEY) || '[]');
-                const id = historyId || crypto.randomUUID();
-                const entry = {
-                    id,
-                    timestamp: new Date().toISOString(),
-                    players,
-                    matches,
-                    params,
-                    name: matchName || ''
-                };
-                const existing = history.findIndex(h => h.id === historyId);
-                if (existing > -1) {
-                    history[existing] = entry;
-                } else {
-                    history.push(entry);
+            const cloudShareBtn = document.getElementById('cloud-share-btn');
+            if (cloudShareBtn) cloudShareBtn.addEventListener('click', enableCloudSync);
+
+            const copyLinkBtn = document.getElementById('share-copy-link-btn');
+            if (copyLinkBtn) copyLinkBtn.addEventListener('click', copySnapshotShare);
+
+            const syncNowBtn = document.getElementById('sync-now-btn');
+            if (syncNowBtn) syncNowBtn.addEventListener('click', async () => {
+                if (syncer) await syncer.flush();
+            });
+
+            const viewerRefreshBtn = document.getElementById('viewer-refresh-btn');
+            if (viewerRefreshBtn) viewerRefreshBtn.addEventListener('click', async () => {
+                viewerRefreshBtn.innerHTML = '<span class="spinner"></span> 刷新中...';
+                viewerRefreshBtn.disabled = true;
+                try {
+                    if (poller) await poller.refreshNow();
+                    else {
+                        const remote = await Share.fetchFromKV(shareId);
+                        if (remote) {
+                            matches = remote.matches || [];
+                            players = remote.players || [];
+                            params = remote.params || null;
+                            matchName = remote.name || matchName;
+                            render();
+                        }
+                    }
+                } catch (err) {
+                    showToast('刷新失败：' + (err.message || err), 'error');
+                } finally {
+                    // render() 会重新挂事件，这里的按钮引用可能已失效
+                    const btn = document.getElementById('viewer-refresh-btn');
+                    if (btn) { btn.innerHTML = '\u21BB 刷新'; btn.disabled = false; }
                 }
-                localStorage.setItem(DB_HISTORY_KEY, JSON.stringify(history));
-                if (!historyId) {
-                    historyId = id;
-                    data.id = id;
-                    sessionStorage.setItem('current_match_data', JSON.stringify({ ...data, matches, id }));
-                    render();
-                }
-                showToast('记录已保存', 'success');
             });
         }
 
@@ -626,6 +954,24 @@
         }
 
         render();
+
+        // Owner 模式：启动自动同步器
+        if (role === 'owner' && shareId) {
+            initSyncer();
+            setSyncStatus('ok', '已开启云同步');
+            // 页面关闭前尝试把未同步的改动 flush 掉
+            window.addEventListener('beforeunload', () => {
+                if (syncer) syncer.flush();
+            });
+        }
+
+        // Viewer 模式：启动轮询
+        if (role === 'viewer' && shareId) {
+            initPoller();
+            window.addEventListener('beforeunload', () => {
+                if (poller) poller.stop();
+            });
+        }
     });
     </script>
 </body>

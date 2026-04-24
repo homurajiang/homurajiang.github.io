@@ -511,18 +511,131 @@ const Matching = (() => {
         return matches;
     }
 
+    // ── 约束下重排：避免同一选手连续出场过多 ─────────────────────────
+    //
+    // 算法：贪心 + 2-opt 修复
+    //   1) 贪心：每次从未放入的对局里挑一个"放进去不会让任何选手连续出场 > maxConsec"的
+    //      如果都不满足（死锁），就降级为任选一个（继续推进，违规交给 2-opt 修）
+    //   2) 2-opt：扫一遍，发现长度为 maxConsec+1 的窗口里存在"全员共同"的选手（=违规），
+    //      就尝试把违规位置的对局和后面一个不含该选手的对局对换，最多迭代若干次。
+    //
+    // 对典型规模（≤40 场）跑一次总耗时在毫秒级。
+    function reorderWithConsecutiveLimit(matches, maxConsec) {
+        maxConsec = maxConsec || 3;
+        if (!Array.isArray(matches) || matches.length <= maxConsec) {
+            return matches ? matches.slice() : [];
+        }
+
+        const playersIn = (m) => new Set([...(m.team1 || []), ...(m.team2 || [])]);
+
+        // 检查：把 candidate 接在 ordered 末尾，是否造成某选手连续 > maxConsec
+        const wouldViolate = (candidate, ordered) => {
+            if (ordered.length < maxConsec) return false;
+            const pl = playersIn(candidate);
+            const recent = ordered.slice(-maxConsec);
+            for (const p of pl) {
+                let allPresent = true;
+                for (const m of recent) {
+                    if (!playersIn(m).has(p)) { allPresent = false; break; }
+                }
+                if (allPresent) return true;
+            }
+            return false;
+        };
+
+        // 统计每个选手在所有对局里出现的总次数（剩余次数用于贪心排序）
+        const remaining = {};
+        for (const m of matches) {
+            for (const p of playersIn(m)) remaining[p] = (remaining[p] || 0) + 1;
+        }
+
+        const pool = shuffle(matches); // 初始打乱，避免每次重排都是同样的结果
+        const ordered = [];
+
+        while (pool.length > 0) {
+            // 先挑出所有不违规的候选
+            let candidates = [];
+            for (let i = 0; i < pool.length; i++) {
+                if (!wouldViolate(pool[i], ordered)) candidates.push(i);
+            }
+            // 全都违规则退而求其次
+            if (candidates.length === 0) {
+                candidates = pool.map((_, i) => i);
+            }
+            // 在候选里，优先选"所含选手剩余出场数之和"最大的那些（让还要打很多场的选手先上场）
+            // 在前 30% 候选里随机挑一个，保持一点随机性
+            candidates.sort((a, b) => {
+                const sumA = [...playersIn(pool[a])].reduce((s, p) => s + (remaining[p] || 0), 0);
+                const sumB = [...playersIn(pool[b])].reduce((s, p) => s + (remaining[p] || 0), 0);
+                return sumB - sumA;
+            });
+            const topN = Math.max(1, Math.ceil(candidates.length * 0.3));
+            const pickedIdx = candidates[Math.floor(Math.random() * topN)];
+            const picked = pool[pickedIdx];
+            ordered.push(picked);
+            pool.splice(pickedIdx, 1);
+            for (const p of playersIn(picked)) remaining[p] -= 1;
+        }
+
+        // 2-opt 修复
+        const findFirstViolation = (arr) => {
+            for (let i = maxConsec; i < arr.length; i++) {
+                const window = arr.slice(i - maxConsec, i + 1); // 长度 maxConsec+1
+                const first = playersIn(window[0]);
+                for (const p of first) {
+                    let all = true;
+                    for (let j = 1; j < window.length; j++) {
+                        if (!playersIn(window[j]).has(p)) { all = false; break; }
+                    }
+                    if (all) return { index: i, player: p };
+                }
+            }
+            return null;
+        };
+
+        for (let attempt = 0; attempt < 50; attempt++) {
+            const v = findFirstViolation(ordered);
+            if (!v) break;
+            let swapped = false;
+            // 尝试把 v.index 位置和后面第一个不含 v.player 的对局对换
+            for (let j = v.index + 1; j < ordered.length; j++) {
+                if (!playersIn(ordered[j]).has(v.player)) {
+                    [ordered[v.index], ordered[j]] = [ordered[j], ordered[v.index]];
+                    swapped = true;
+                    break;
+                }
+            }
+            // 若后面没有了，尝试往前交换
+            if (!swapped) {
+                for (let j = v.index - maxConsec; j >= 0; j--) {
+                    if (!playersIn(ordered[j]).has(v.player)) {
+                        [ordered[v.index], ordered[j]] = [ordered[j], ordered[v.index]];
+                        swapped = true;
+                        break;
+                    }
+                }
+            }
+            if (!swapped) break; // 没法再修了（该选手在所有对局里都出现，数学不可避免）
+        }
+
+        return ordered;
+    }
+
     // ── Public API ───────────────────────────────────────────────────────
 
     function generate(players, mode, k) {
         resetPartnerships();
+        let matches;
         if (mode === 'mixed') {
-            return generateMixedDoubles(players, k);
+            matches = generateMixedDoubles(players, k);
+        } else if (mode === 'singles_robin') {
+            matches = generateSinglesRobin(players, k);
+        } else {
+            matches = generateRandomDoubles(players, k);
         }
-        if (mode === 'singles_robin') {
-            return generateSinglesRobin(players, k);
-        }
-        return generateRandomDoubles(players, k);
+        // 生成后默认做一次约束重排（连续出场 ≤ 3），减轻体力负担
+        return reorderWithConsecutiveLimit(matches, 3);
     }
 
-    return { getPossibleK, generate };
+    return { getPossibleK, generate, reorderWithConsecutiveLimit };
 })();
