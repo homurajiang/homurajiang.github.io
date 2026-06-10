@@ -36,7 +36,7 @@
             padding: 2rem 1rem;
         }
         .container {
-            max-width: 720px;
+            max-width: 920px;
             width: 100%;
             text-align: center;
             animation: fadeUp .6s ease-out;
@@ -62,7 +62,7 @@
 
         .entry-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 1.25rem;
             margin-bottom: 2rem;
         }
@@ -88,6 +88,7 @@
         }
         .entry-card:nth-child(1) { animation-delay: .05s; }
         .entry-card:nth-child(2) { animation-delay: .15s; }
+        .entry-card:nth-child(3) { animation-delay: .25s; }
 
         .entry-card:hover {
             transform: translateY(-4px);
@@ -166,10 +167,15 @@
                 <div class="desc" id="hist-desc">—</div>
                 <span class="badge" id="hist-badge" style="display:none;"></span>
             </a>
+            <a class="entry-card" href="tournament.html">
+                <div class="icon">🏆</div>
+                <div class="title">比赛分组</div>
+                <div class="desc">12 队分组与赛制说明</div>
+            </a>
         </div>
 
         <div class="footer">
-            支持随机双打、混合双打、单打轮转；自动均衡对局数与体力连场<br>
+            支持随机双打、混合双打、单打轮转、12 队比赛分组；自动均衡对局数与体力连场<br>
             实时录入比分 · 自动生成排名 · 分享链接一键直达
         </div>
     </div>

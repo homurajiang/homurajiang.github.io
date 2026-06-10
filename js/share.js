@@ -12,6 +12,7 @@
   const KV_ENDPOINT = 'https://github-kv-api.homurajiang.workers.dev';
   const API_KEY = '42da0738-6e16-4024-8f92-ce920c047b59';
   const KEY_PREFIX = 'bad_match/';
+  const TOURNAMENT_KEY_PREFIX = 'badminton_tournament/';
   const MY_MATCHES_KEY = 'badminton_my_matches';
   const LEGACY_OWNER_KEY = 'badminton_owned_share_ids';
   const MAX_RECORDS = 50;
@@ -200,17 +201,22 @@
   }
 
   // ── KV 存取 ────────────────────────────────────────────────────────
-  function kvUrl(id) {
-    return `${KV_ENDPOINT}/${KEY_PREFIX}${encodeURIComponent(id)}`;
+  function normalizeKeyPrefix(options) {
+    if (typeof options === 'string') return options;
+    return (options && options.keyPrefix) || KEY_PREFIX;
   }
 
-  async function uploadToKV(id, data) {
+  function kvUrl(id, options) {
+    return `${KV_ENDPOINT}/${normalizeKeyPrefix(options)}${encodeURIComponent(id)}`;
+  }
+
+  async function uploadToKV(id, data, options) {
     const payload = {
       version: SCHEMA_VERSION,
       ...data,
       updatedAt: new Date().toISOString(),
     };
-    const res = await fetch(kvUrl(id), {
+    const res = await fetch(kvUrl(id, options), {
       method: 'PUT',
       headers: {
         'x-api-key': API_KEY,
@@ -234,7 +240,7 @@
     for (let i = 0; i < maxRetries; i++) {
       try {
         onAttempt(i + 1, maxRetries);
-        return await uploadToKV(id, data);
+        return await uploadToKV(id, data, opts);
       } catch (err) {
         lastErr = err;
         if (i < maxRetries - 1) {
@@ -246,8 +252,8 @@
     throw lastErr;
   }
 
-  async function fetchFromKV(id) {
-    const res = await fetch(kvUrl(id), {
+  async function fetchFromKV(id, options) {
+    const res = await fetch(kvUrl(id, options), {
       method: 'GET',
       headers: { 'x-api-key': API_KEY },
     });
@@ -263,8 +269,8 @@
     }
   }
 
-  async function deleteFromKV(id) {
-    const res = await fetch(kvUrl(id), {
+  async function deleteFromKV(id, options) {
+    const res = await fetch(kvUrl(id, options), {
       method: 'DELETE',
       headers: { 'x-api-key': API_KEY },
     });
@@ -408,6 +414,7 @@
   window.BadmintonShare = {
     KV_ENDPOINT,
     KEY_PREFIX,
+    TOURNAMENT_KEY_PREFIX,
     SCHEMA_VERSION,
     MAX_RECORDS,
     compressData,

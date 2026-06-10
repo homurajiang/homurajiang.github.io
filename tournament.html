@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>比赛分组 · 羽毛球对阵生成器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+            --shadow-lg: 0 4px 6px rgba(0,0,0,.07), 0 12px 28px rgba(0,0,0,.08);
+            --transition: .25s cubic-bezier(.4,0,.2,1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #fdf2f8 100%);
+            color: var(--gray-800);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes cardEnter { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { to { opacity: 0; transform: translateX(40px); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
+        .toast { padding: .75rem 1.25rem; border-radius: var(--radius-sm); font-size: .9rem; font-weight: 500; color: #fff; box-shadow: var(--shadow-lg); animation: toastIn .3s ease-out; cursor: pointer; }
+        .toast.error { background: var(--danger); }
+        .toast.success { background: var(--success); }
+        .toast.info { background: var(--primary); }
+        .toast.removing { animation: toastOut .25s ease-in forwards; }
+
+        .page-container {
+            max-width: 1120px;
+            margin: 0 auto;
+            animation: fadeUp .5s ease-out;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: .75rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header p {
+            color: var(--gray-500);
+            margin-top: .45rem;
+            font-size: .92rem;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(320px, .85fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+        .card {
+            background: rgba(255,255,255,.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.6);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: box-shadow var(--transition);
+        }
+        .card:hover { box-shadow: var(--shadow-lg); }
+        .card-title {
+            font-size: 1rem;
+            font-weight: 650;
+            color: var(--gray-700);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+        .card-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.1em;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .4rem;
+            padding: .55rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: .88rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        .btn:active { transform: scale(.97); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(99,102,241,.25);
+        }
+        .btn-primary:hover { box-shadow: 0 4px 14px rgba(99,102,241,.35); transform: translateY(-1px); }
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(16,185,129,.25);
+        }
+        .btn-success:hover { box-shadow: 0 4px 14px rgba(16,185,129,.35); transform: translateY(-1px); }
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+        .btn-secondary:hover { background: var(--gray-200); }
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,.35);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+        }
+
+        .field-row {
+            display: flex;
+            gap: .75rem;
+            margin-bottom: .9rem;
+        }
+        .field {
+            flex: 1;
+            min-width: 0;
+        }
+        label {
+            display: block;
+            font-size: .78rem;
+            color: var(--gray-500);
+            margin-bottom: .3rem;
+            font-weight: 600;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: .55rem .7rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: .92rem;
+            outline: none;
+            background: #fff;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        input:focus {
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+        }
+        .teams-table {
+            display: flex;
+            flex-direction: column;
+            gap: .7rem;
+        }
+        .team-row {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: .8rem;
+            display: grid;
+            grid-template-columns: 44px 1fr 1fr 64px;
+            gap: .75rem;
+            align-items: center;
+        }
+        .team-index {
+            color: var(--gray-400);
+            font-weight: 700;
+            text-align: center;
+        }
+        .player-fields {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 76px auto;
+            gap: .45rem;
+            align-items: center;
+        }
+        .gender-toggle {
+            display: flex;
+            overflow: hidden;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            background: #fff;
+        }
+        .gender-toggle input { display: none; }
+        .gender-toggle label {
+            padding: .42rem .5rem;
+            margin: 0;
+            cursor: pointer;
+            color: var(--gray-500);
+            font-size: .78rem;
+            font-weight: 600;
+            user-select: none;
+        }
+        .gender-toggle input:checked + label {
+            background: var(--primary);
+            color: #fff;
+        }
+        .team-level {
+            text-align: center;
+            font-size: .82rem;
+            color: var(--gray-500);
+        }
+        .team-level strong {
+            display: block;
+            color: var(--gray-800);
+            font-size: 1rem;
+        }
+        .actions {
+            display: flex;
+            gap: .5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        .hint {
+            font-size: .82rem;
+            color: var(--gray-500);
+            line-height: 1.6;
+        }
+        .error-box {
+            display: none;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            border-radius: var(--radius-sm);
+            padding: .65rem .8rem;
+            margin-top: .75rem;
+            font-size: .86rem;
+            line-height: 1.5;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: .65rem;
+            margin-bottom: 1rem;
+        }
+        .summary-item {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: .75rem;
+            text-align: center;
+        }
+        .summary-item .label {
+            font-size: .74rem;
+            color: var(--gray-500);
+            margin-bottom: .25rem;
+        }
+        .summary-item .value {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .group-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .85rem;
+        }
+        .group-card {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: .85rem;
+            animation: cardEnter .35s ease-out both;
+        }
+        .group-card h3 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: .5rem;
+            font-size: 1rem;
+            margin-bottom: .7rem;
+            color: var(--gray-800);
+        }
+        .group-total {
+            font-size: .76rem;
+            color: var(--gray-500);
+            background: var(--gray-100);
+            border-radius: 999px;
+            padding: .16rem .5rem;
+        }
+        .team-card {
+            padding: .65rem 0;
+            border-top: 1px solid var(--gray-100);
+        }
+        .team-card:first-of-type { border-top: none; }
+        .team-card .top {
+            display: flex;
+            justify-content: space-between;
+            gap: .5rem;
+            margin-bottom: .25rem;
+            font-size: .9rem;
+            font-weight: 650;
+        }
+        .team-card .players {
+            color: var(--gray-500);
+            font-size: .82rem;
+            line-height: 1.5;
+        }
+        .seed {
+            color: var(--primary-dark);
+            background: #eef2ff;
+            border-radius: 999px;
+            padding: .12rem .45rem;
+            font-size: .72rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .empty-result {
+            text-align: center;
+            color: var(--gray-500);
+            padding: 2rem .5rem;
+            font-size: .9rem;
+            line-height: 1.6;
+        }
+        .rules {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+        }
+        .rule-block {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            padding: .85rem;
+        }
+        .rule-block h3 {
+            font-size: .92rem;
+            margin-bottom: .45rem;
+            color: var(--gray-700);
+        }
+        .rule-block ul {
+            padding-left: 1.1rem;
+            color: var(--gray-600);
+            font-size: .84rem;
+            line-height: 1.7;
+        }
+        .bracket {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .4rem;
+            margin-top: .55rem;
+        }
+        .bracket div {
+            background: #fff;
+            border: 1px dashed var(--gray-300);
+            border-radius: 6px;
+            padding: .45rem;
+            text-align: center;
+            font-size: .82rem;
+            color: var(--gray-700);
+            font-weight: 600;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(17,24,39,.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 10000;
+        }
+        .modal {
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 1.4rem;
+            width: min(560px, 100%);
+        }
+        .modal h3 { font-size: 1.05rem; color: var(--gray-800); margin-bottom: .5rem; }
+        .modal p { color: var(--gray-500); font-size: .86rem; line-height: 1.5; margin-bottom: .8rem; }
+        .share-row { display: flex; gap: .5rem; }
+        .share-row input { flex: 1; }
+        .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+
+        @media (max-width: 960px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 720px) {
+            body { padding: 1rem .5rem; }
+            .team-row {
+                grid-template-columns: 1fr;
+                gap: .55rem;
+            }
+            .team-index { text-align: left; }
+            .player-fields { grid-template-columns: minmax(0, 1fr) 72px auto; }
+            .group-grid, .summary-grid, .bracket { grid-template-columns: 1fr; }
+            .field-row, .share-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+    <div class="page-container">
+        <div class="top-bar">
+            <a href="index.html" class="btn btn-secondary">← 返回首页</a>
+            <button class="btn btn-secondary" id="copy-link-btn" style="display:none;">复制当前链接</button>
+        </div>
+
+        <div class="header">
+            <h1>🏸 羽毛球比赛分组</h1>
+            <p>12 支双打队伍 · 按队伍等级分档随机 · 尽量平衡 A/B 两组实力分布</p>
+        </div>
+
+        <div class="layout">
+            <main>
+                <section class="card">
+                    <div class="card-title">比赛信息</div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="tournament-name">比赛名称</label>
+                            <input id="tournament-name" type="text" placeholder="例如：周末羽毛球赛">
+                        </div>
+                        <div class="field">
+                            <label for="candidate-count">随机候选次数</label>
+                            <input id="candidate-count" type="number" min="50" max="2000" step="50" value="500">
+                        </div>
+                    </div>
+                    <p class="hint">算法会先按队伍等级从高到低排序，每两队为一档；每档随机拆到 A/B 组，并在多次候选中选择等级差和分布差更小的一版。</p>
+                </section>
+
+                <section class="card">
+                    <div class="card-title">队伍名单</div>
+                    <div class="teams-table" id="teams-table"></div>
+                    <div class="actions">
+                        <button class="btn btn-primary" id="generate-btn">生成分组</button>
+                        <button class="btn btn-secondary" id="regenerate-btn">重新分组</button>
+                        <button class="btn btn-secondary" id="clear-btn">清空名单</button>
+                    </div>
+                    <div class="error-box" id="error-box"></div>
+                </section>
+            </main>
+
+            <aside>
+                <section class="card">
+                    <div class="card-title">分组结果</div>
+                    <div id="result-panel">
+                        <div class="empty-result">填写 12 支队伍后点击“生成分组”。<br>分组结果可重新随机，也可以保存到 Cloudflare KV 并生成分享链接。</div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-success" id="save-btn" disabled>☁ 保存到云端并复制链接</button>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-title">赛制规则</div>
+                    <div class="rules">
+                        <div class="rule-block">
+                            <h3>分组与小组赛</h3>
+                            <ul>
+                                <li>共 12 支双打队伍，分为 A、B 两组，每组 6 队。</li>
+                                <li>小组赛采用组内单循环，每队打 5 场。</li>
+                                <li>每场单局 21 分，20 平后需领先 2 分，最高 30 分封顶。</li>
+                            </ul>
+                        </div>
+                        <div class="rule-block">
+                            <h3>小组排名与晋级</h3>
+                            <ul>
+                                <li>每组 6 取前 4 晋级淘汰赛。</li>
+                                <li>排名依次按净胜局、净胜分、胜负关系确定。</li>
+                                <li>仍无法区分时，由现场加赛或抽签决定。</li>
+                            </ul>
+                        </div>
+                        <div class="rule-block">
+                            <h3>淘汰赛对阵</h3>
+                            <div class="bracket">
+                                <div>A1 vs B4</div>
+                                <div>A2 vs B3</div>
+                                <div>A3 vs B2</div>
+                                <div>A4 vs B1</div>
+                            </div>
+                            <ul style="margin-top:.5rem;">
+                                <li>四分之一决赛、半决赛为单局 21 分。</li>
+                                <li>决赛和季军赛为三局两胜，每局 21 分。</li>
+                            </ul>
+                        </div>
+                        <div class="rule-block">
+                            <h3>女生让分</h3>
+                            <ul>
+                                <li>双方女生人数相同时不让分。</li>
+                                <li>女生人数更多的一方，每多 1 名女生，开局获得 4 分让分。</li>
+                                <li>例：男双 vs 混双为 0:4；男双 vs 女双为 0:8；混双 vs 女双为 0:4。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </div>
+    </div>
+
+    <script src="js/lz-string.min.js"></script>
+    <script src="js/share.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const TEAM_COUNT = 12;
+        const OWNER_KEY = 'badminton_tournament_owned_ids';
+        const DRAFT_KEY = 'badminton_tournament_draft';
+        const Share = window.BadmintonShare;
+        const keyPrefix = Share.TOURNAMENT_KEY_PREFIX;
+
+        const teamsTable = document.getElementById('teams-table');
+        const resultPanel = document.getElementById('result-panel');
+        const errorBox = document.getElementById('error-box');
+        const nameInput = document.getElementById('tournament-name');
+        const candidateInput = document.getElementById('candidate-count');
+        const generateBtn = document.getElementById('generate-btn');
+        const regenerateBtn = document.getElementById('regenerate-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+
+        let shareId = null;
+        let groups = null;
+        let metrics = null;
+        let generatedAt = null;
+        let latestRemoteUpdatedAt = null;
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            toast.addEventListener('click', () => {
+                toast.classList.add('removing');
+                toast.addEventListener('animationend', () => toast.remove());
+            });
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.classList.add('removing');
+                    toast.addEventListener('animationend', () => toast.remove());
+                }
+            }, 3000);
+        }
+
+        function readOwnerMap() {
+            try {
+                return JSON.parse(localStorage.getItem(OWNER_KEY) || '{}') || {};
+            } catch (_) {
+                return {};
+            }
+        }
+
+        function isOwner(id) {
+            const map = readOwnerMap();
+            return !!(id && map[id]);
+        }
+
+        function markOwner(id) {
+            if (!id) return;
+            const map = readOwnerMap();
+            map[id] = { createdAt: Date.now(), lastSeenAt: Date.now() };
+            localStorage.setItem(OWNER_KEY, JSON.stringify(map));
+        }
+
+        function shuffle(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function sumLevels(list) {
+            return list.reduce((sum, team) => sum + team.totalLevel, 0);
+        }
+
+        function scoreCandidate(groupA, groupB) {
+            const levelsA = groupA.map(t => t.totalLevel).sort((a, b) => b - a);
+            const levelsB = groupB.map(t => t.totalLevel).sort((a, b) => b - a);
+            const totalDiff = Math.abs(sumLevels(groupA) - sumLevels(groupB));
+            const distributionDiff = levelsA.reduce((sum, v, i) => sum + Math.abs(v - levelsB[i]), 0);
+            const maxSlotDiff = levelsA.reduce((max, v, i) => Math.max(max, Math.abs(v - levelsB[i])), 0);
+            return {
+                score: totalDiff * 100 + distributionDiff * 10 + maxSlotDiff,
+                totalDiff,
+                distributionDiff,
+                maxSlotDiff,
+                totalA: sumLevels(groupA),
+                totalB: sumLevels(groupB),
+            };
+        }
+
+        function generateBalancedGroups(teams, tries) {
+            const ranked = teams
+                .map(team => ({ ...team, tie: Math.random() }))
+                .sort((a, b) => (b.totalLevel - a.totalLevel) || (a.tie - b.tie));
+
+            const tiers = [];
+            for (let i = 0; i < ranked.length; i += 2) {
+                tiers.push(ranked.slice(i, i + 2).map(({ tie, ...team }) => team));
+            }
+
+            let best = null;
+            const attempts = Math.max(1, Number(tries) || 500);
+            for (let attempt = 0; attempt < attempts; attempt++) {
+                const groupA = [];
+                const groupB = [];
+                for (const tier of tiers) {
+                    const [first, second] = shuffle(tier);
+                    groupA.push(first);
+                    groupB.push(second);
+                }
+                const currentMetrics = scoreCandidate(groupA, groupB);
+                if (!best || currentMetrics.score < best.metrics.score) {
+                    best = { groupA, groupB, metrics: currentMetrics };
+                }
+            }
+            return {
+                A: best.groupA.sort((a, b) => b.totalLevel - a.totalLevel),
+                B: best.groupB.sort((a, b) => b.totalLevel - a.totalLevel),
+                metrics: best.metrics,
+            };
+        }
+
+        function defaultTeams() {
+            return Array.from({ length: TEAM_COUNT }, (_, i) => ({
+                id: `team-${i + 1}`,
+                players: [
+                    { name: '', level: '', gender: 'M' },
+                    { name: '', level: '', gender: 'M' },
+                ],
+            }));
+        }
+
+        function renderTeamInputs(teams) {
+            teamsTable.innerHTML = teams.map((team, index) => `
+                <div class="team-row" data-team="${index}">
+                    <div class="team-index">#${index + 1}</div>
+                    ${[0, 1].map(playerIndex => {
+                        const player = team.players[playerIndex] || { name: '', level: '', gender: 'M' };
+                        const prefix = `team-${index}-p-${playerIndex}`;
+                        return `
+                        <div class="player-fields">
+                            <input type="text" data-field="name" data-player="${playerIndex}" placeholder="队员${playerIndex + 1}" value="${escapeHtml(player.name)}">
+                            <input type="number" data-field="level" data-player="${playerIndex}" min="0" step="0.5" placeholder="等级" value="${escapeHtml(player.level)}">
+                            <div class="gender-toggle">
+                                <input id="${prefix}-m" type="radio" name="${prefix}-gender" data-field="gender" data-player="${playerIndex}" value="M" ${player.gender !== 'F' ? 'checked' : ''}>
+                                <label for="${prefix}-m">男</label>
+                                <input id="${prefix}-f" type="radio" name="${prefix}-gender" data-field="gender" data-player="${playerIndex}" value="F" ${player.gender === 'F' ? 'checked' : ''}>
+                                <label for="${prefix}-f">女</label>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                    <div class="team-level">队伍等级<strong data-total="${index}">0</strong></div>
+                </div>
+            `).join('');
+            refreshTeamTotals();
+        }
+
+        function refreshTeamTotals() {
+            for (let i = 0; i < TEAM_COUNT; i++) {
+                const row = teamsTable.querySelector(`[data-team="${i}"]`);
+                const totalEl = teamsTable.querySelector(`[data-total="${i}"]`);
+                if (!row || !totalEl) continue;
+                const levels = Array.from(row.querySelectorAll('input[data-field="level"]')).map(input => Number(input.value) || 0);
+                totalEl.textContent = String(levels[0] + levels[1]);
+            }
+        }
+
+        function collectTeams() {
+            const teams = [];
+            const errors = [];
+            const seenNames = new Set();
+
+            for (let i = 0; i < TEAM_COUNT; i++) {
+                const row = teamsTable.querySelector(`[data-team="${i}"]`);
+                const players = [];
+                for (let p = 0; p < 2; p++) {
+                    const name = (row.querySelector(`input[data-player="${p}"][data-field="name"]`).value || '').trim();
+                    const levelRaw = row.querySelector(`input[data-player="${p}"][data-field="level"]`).value;
+                    const level = Number(levelRaw);
+                    const genderInput = row.querySelector(`input[data-player="${p}"][data-field="gender"]:checked`);
+                    if (!name) errors.push(`第 ${i + 1} 队的队员 ${p + 1} 未填写姓名`);
+                    if (levelRaw === '' || !Number.isFinite(level) || level < 0) errors.push(`第 ${i + 1} 队的队员 ${p + 1} 等级无效`);
+                    const normalized = name.toLowerCase();
+                    if (name && seenNames.has(normalized)) errors.push(`队员姓名重复：${name}`);
+                    if (name) seenNames.add(normalized);
+                    players.push({ name, level, gender: genderInput ? genderInput.value : 'M' });
+                }
+                teams.push({
+                    id: `team-${i + 1}`,
+                    displayName: `队伍 ${i + 1}`,
+                    players,
+                    totalLevel: players[0].level + players[1].level,
+                    femaleCount: players.filter(p => p.gender === 'F').length,
+                });
+            }
+
+            return { teams, errors };
+        }
+
+        function showError(messages) {
+            if (!messages || messages.length === 0) {
+                errorBox.style.display = 'none';
+                errorBox.textContent = '';
+                return;
+            }
+            errorBox.style.display = 'block';
+            errorBox.innerHTML = messages.slice(0, 6).map(escapeHtml).join('<br>') + (messages.length > 6 ? '<br>...' : '');
+        }
+
+        function teamLabel(team) {
+            return team.players.map(p => `${p.name}(${p.level}${p.gender === 'F' ? ' 女' : ' 男'})`).join(' / ');
+        }
+
+        function renderGroup(name, list) {
+            const total = sumLevels(list);
+            return `
+                <div class="group-card">
+                    <h3>${name} 组 <span class="group-total">总等级 ${total}</span></h3>
+                    ${list.map((team, index) => `
+                        <div class="team-card">
+                            <div class="top">
+                                <span>${index + 1}. ${escapeHtml(team.players[0].name)} / ${escapeHtml(team.players[1].name)}</span>
+                                <span class="seed">等级 ${team.totalLevel}</span>
+                            </div>
+                            <div class="players">${escapeHtml(teamLabel(team))} · 女生 ${team.femaleCount} 人</div>
+                        </div>
+                    `).join('')}
+                </div>`;
+        }
+
+        function renderResult() {
+            if (!groups || !metrics) {
+                resultPanel.innerHTML = `<div class="empty-result">填写 12 支队伍后点击“生成分组”。<br>分组结果可重新随机，也可以保存到 Cloudflare KV 并生成分享链接。</div>`;
+                saveBtn.disabled = true;
+                return;
+            }
+
+            resultPanel.innerHTML = `
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="label">A 组总等级</div>
+                        <div class="value">${metrics.totalA}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">B 组总等级</div>
+                        <div class="value">${metrics.totalB}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">总等级差</div>
+                        <div class="value">${metrics.totalDiff}</div>
+                    </div>
+                </div>
+                <div class="hint" style="margin-bottom:.85rem;">分布差 ${metrics.distributionDiff}，最大同位差 ${metrics.maxSlotDiff}。结果生成于 ${new Date(generatedAt).toLocaleString('zh-CN')}。</div>
+                <div class="group-grid">
+                    ${renderGroup('A', groups.A)}
+                    ${renderGroup('B', groups.B)}
+                </div>
+            `;
+            saveBtn.disabled = false;
+        }
+
+        function currentPayload() {
+            const { teams } = collectTeams();
+            return {
+                type: 'tournament_grouping',
+                name: nameInput.value.trim() || '羽毛球比赛分组',
+                candidateCount: Number(candidateInput.value) || 500,
+                teams,
+                groups,
+                metrics,
+                generatedAt,
+                rulesVersion: 1,
+            };
+        }
+
+        function persistDraft() {
+            try {
+                localStorage.setItem(DRAFT_KEY, JSON.stringify(currentPayload()));
+            } catch (_) {}
+        }
+
+        function applyPayload(payload) {
+            if (!payload) return;
+            nameInput.value = payload.name || '';
+            candidateInput.value = payload.candidateCount || 500;
+            renderTeamInputs((payload.teams && payload.teams.length === TEAM_COUNT) ? payload.teams : defaultTeams());
+            groups = payload.groups || null;
+            metrics = payload.metrics || null;
+            generatedAt = payload.generatedAt || null;
+            latestRemoteUpdatedAt = payload.updatedAt || null;
+            renderResult();
+        }
+
+        function generate() {
+            const { teams, errors } = collectTeams();
+            if (errors.length > 0) {
+                showError(errors);
+                return false;
+            }
+            showError([]);
+            const result = generateBalancedGroups(teams, candidateInput.value);
+            groups = { A: result.A, B: result.B };
+            metrics = result.metrics;
+            generatedAt = new Date().toISOString();
+            renderResult();
+            persistDraft();
+            return true;
+        }
+
+        function buildCurrentUrl() {
+            return Share.buildShareURL({ id: shareId, data: currentPayload() });
+        }
+
+        async function copyText(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch (_) {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+            }
+        }
+
+        function openShareModal(url, title) {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop';
+            backdrop.innerHTML = `
+                <div class="modal">
+                    <h3>${escapeHtml(title)}</h3>
+                    <p>分组记录已保存到 Cloudflare KV。链接里也包含一份压缩快照，云端暂时不可用时仍可打开最近一次结果。</p>
+                    <div class="share-row">
+                        <input type="text" id="share-url-input" readonly value="${escapeHtml(url)}">
+                        <button class="btn btn-primary" id="modal-copy-btn">复制</button>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="modal-close-btn">关闭</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(backdrop);
+            const input = backdrop.querySelector('#share-url-input');
+            input.focus();
+            input.select();
+            backdrop.querySelector('#modal-copy-btn').addEventListener('click', async () => {
+                await copyText(url);
+                showToast('链接已复制到剪贴板', 'success');
+            });
+            backdrop.querySelector('#modal-close-btn').addEventListener('click', () => backdrop.remove());
+            backdrop.addEventListener('click', (event) => {
+                if (event.target === backdrop) backdrop.remove();
+            });
+        }
+
+        async function saveToCloud() {
+            if (!groups) {
+                showToast('请先生成分组', 'error');
+                return;
+            }
+
+            const { errors } = collectTeams();
+            if (errors.length > 0) {
+                showError(errors);
+                return;
+            }
+
+            const original = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner"></span> 保存中...';
+            let finalButtonText = original;
+            try {
+                const canOverwrite = shareId && isOwner(shareId);
+                const id = canOverwrite ? shareId : Share.generateShortId();
+                const payload = await Share.uploadToKVWithRetry(id, currentPayload(), {
+                    keyPrefix,
+                    maxRetries: 3,
+                    onAttempt: (n, total) => {
+                        if (n > 1) saveBtn.innerHTML = `<span class="spinner"></span> 重试中 (${n}/${total})...`;
+                    },
+                });
+                shareId = id;
+                markOwner(id);
+                latestRemoteUpdatedAt = payload.updatedAt;
+                Share.updateAddressBar({ id: shareId, data: currentPayload() });
+                copyLinkBtn.style.display = '';
+                const url = buildCurrentUrl();
+                await copyText(url);
+                openShareModal(url, canOverwrite ? '分组记录已更新' : '分组记录已保存');
+                finalButtonText = '☁ 保存到云端并复制链接';
+                showToast('已保存并复制分享链接', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('保存失败：' + (err.message || err), 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = finalButtonText;
+            }
+        }
+
+        async function loadInitialData() {
+            renderTeamInputs(defaultTeams());
+            const { id, d } = Share.parseHash();
+            shareId = id || null;
+            let remote = null;
+            let snapshot = null;
+            if (d) snapshot = Share.decompressData(d);
+
+            if (shareId) {
+                try {
+                    remote = await Share.fetchFromKV(shareId, { keyPrefix });
+                } catch (err) {
+                    console.warn('KV 读取失败，尝试使用 URL 快照', err);
+                    showToast('云端读取失败，已尝试加载链接快照', 'info');
+                }
+            }
+
+            if (remote || snapshot) {
+                const remoteTs = remote && remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+                const snapshotTs = snapshot && snapshot.updatedAt ? new Date(snapshot.updatedAt).getTime() : 0;
+                applyPayload(remoteTs >= snapshotTs ? remote : snapshot);
+                if (shareId) copyLinkBtn.style.display = '';
+                if (shareId && !isOwner(shareId)) {
+                    saveBtn.textContent = '☁ 另存为云端并复制链接';
+                }
+                return;
+            }
+
+            try {
+                const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+                if (draft) applyPayload(draft);
+            } catch (_) {}
+        }
+
+        teamsTable.addEventListener('input', (event) => {
+            if (event.target.matches('input[data-field="level"]')) refreshTeamTotals();
+            persistDraft();
+        });
+        teamsTable.addEventListener('change', persistDraft);
+
+        generateBtn.addEventListener('click', generate);
+        regenerateBtn.addEventListener('click', generate);
+        clearBtn.addEventListener('click', () => {
+            shareId = null;
+            groups = null;
+            metrics = null;
+            generatedAt = null;
+            latestRemoteUpdatedAt = null;
+            nameInput.value = '';
+            candidateInput.value = 500;
+            renderTeamInputs(defaultTeams());
+            renderResult();
+            showError([]);
+            localStorage.removeItem(DRAFT_KEY);
+            history.replaceState(null, '', location.pathname + location.search);
+            copyLinkBtn.style.display = 'none';
+            saveBtn.textContent = '☁ 保存到云端并复制链接';
+        });
+        saveBtn.addEventListener('click', saveToCloud);
+        copyLinkBtn.addEventListener('click', async () => {
+            const url = buildCurrentUrl();
+            await copyText(url);
+            showToast('当前链接已复制', 'success');
+        });
+        nameInput.addEventListener('input', persistDraft);
+        candidateInput.addEventListener('input', persistDraft);
+
+        await loadInitialData();
+    });
+    </script>
+</body>
+</html>

@@ -9,6 +9,7 @@
 - **单打轮转**：单打循环赛模式。
 - **连续出场优化**：默认重排对局顺序，使任一选手连续出场不超过 3 场（兼顾体力）。
 - **实时统计**：比分录入、胜负排名、净胜分统计。
+- **比赛分组**：支持 12 支双打队伍按队伍等级随机均衡分为 A/B 两组，并展示小组赛与淘汰赛规则。
 - **云同步分享**：点一下"开启云同步并分享"就把比赛存到云端并拿到分享链接；之后的改动自动同步。
 - **比赛历史**：首页"查看比赛历史"集中管理所有你开启过云同步的比赛。
 - **响应式设计**：适配手机和桌面端。
@@ -16,9 +17,10 @@
 ## 页面入口
 
 ```
-index.html       ← 着陆页：两个大入口
+index.html       ← 着陆页：三个大入口
   ├── generate.html  ← 生成新对阵
-  └── history.html   ← 查看比赛历史
+  ├── history.html   ← 查看比赛历史
+  └── tournament.html ← 12 队比赛分组
 
 result.html      ← 对阵结果页（三种角色：local / owner / viewer）
 ```
@@ -30,6 +32,7 @@ result.html      ← 对阵结果页（三种角色：local / owner / viewer）
 ├── index.html              # 着陆页
 ├── generate.html           # 对阵生成器
 ├── history.html            # 比赛历史列表（从 KV 拉取）
+├── tournament.html         # 12 队分组工具（含赛制规则与 KV 分享）
 ├── result.html             # 对阵结果页（含分享、云同步、访客视图）
 ├── js/
 │   ├── matching.js         # 匹配算法 + 连续出场约束重排
@@ -73,8 +76,9 @@ result.html      ← 对阵结果页（三种角色：local / owner / viewer）
 ### 后端（Cloudflare Worker + KV）
 
 - REST 接口：`GET / PUT / DELETE  /bad_match/<id>`
+- 分组记录：`GET / PUT / DELETE /badminton_tournament/<id>`
 - 鉴权：`x-api-key` header
-- Key 白名单：仅 `bad_match/[a-z0-9]{6,32}` 格式
+- Key 白名单：仅 `bad_match/[a-z0-9]{6,32}`、`badminton_tournament/[a-z0-9]{6,32}` 格式
 - 请求体上限：100 KB
 - 部署：进入 `cloudeflare_kv/` 后 `wrangler deploy`（需先在 Cloudflare 控制台：绑定 KV namespace 为 `STORAGE`，设置 `API_KEY` secret）
 

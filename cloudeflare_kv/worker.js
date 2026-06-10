@@ -46,10 +46,12 @@ export default {
 
     // Key 白名单：
     //   - 羽毛球分享数据： bad_match/<id>，id 为 6~32 位 [a-z0-9]
+    //   - 羽毛球分组记录： badminton_tournament/<id>，id 为 6~32 位 [a-z0-9]
     //   - 老的测试 key： test-data （保留兼容）
     const isBadMatch = /^bad_match\/[a-z0-9]{6,32}$/.test(storageKey);
+    const isTournament = /^badminton_tournament\/[a-z0-9]{6,32}$/.test(storageKey);
     const isLegacyTest = storageKey === "test-data";
-    if (!isBadMatch && !isLegacyTest) {
+    if (!isBadMatch && !isTournament && !isLegacyTest) {
       return new Response(JSON.stringify({ error: "Invalid key format" }), {
         status: 400,
         headers: corsHeaders,
