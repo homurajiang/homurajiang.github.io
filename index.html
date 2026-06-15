@@ -163,7 +163,7 @@
             </a>
             <a class="entry-card" href="history.html">
                 <div class="icon">📜</div>
-                <div class="title">查看比赛历史</div>
+                <div class="title">查看历史记录</div>
                 <div class="desc" id="hist-desc">—</div>
                 <span class="badge" id="hist-badge" style="display:none;"></span>
             </a>
@@ -184,13 +184,15 @@
     <script src="js/share.js"></script>
     <script>
         (function () {
-            const { owner, viewer, total } = BadmintonShare.countByRole();
+            const matchCounts = BadmintonShare.countByRole();
+            const tournamentCounts = BadmintonShare.countTournamentsByRole();
+            const total = matchCounts.total + tournamentCounts.total;
             const desc = document.getElementById('hist-desc');
             const badge = document.getElementById('hist-badge');
             if (total > 0) {
                 const parts = [];
-                if (owner > 0) parts.push(`我创建 ${owner}`);
-                if (viewer > 0) parts.push(`访问过 ${viewer}`);
+                if (matchCounts.total > 0) parts.push(`对局 ${matchCounts.total}`);
+                if (tournamentCounts.total > 0) parts.push(`分组 ${tournamentCounts.total}`);
                 desc.textContent = parts.join(' · ');
                 badge.textContent = total > 99 ? '99+' : String(total);
                 badge.style.display = '';

@@ -594,7 +594,7 @@
 
         function isOwner(id) {
             const map = readOwnerMap();
-            return !!(id && map[id]);
+            return !!(id && map[id]) || Share.isTournamentOwner(id);
         }
 
         function markOwner(id) {
@@ -602,6 +602,7 @@
             const map = readOwnerMap();
             map[id] = { createdAt: Date.now(), lastSeenAt: Date.now() };
             localStorage.setItem(OWNER_KEY, JSON.stringify(map));
+            Share.markTournamentAsOwner(id, { name: nameInput.value.trim() || '羽毛球比赛分组' });
         }
 
         function shuffle(arr) {
@@ -963,10 +964,14 @@
             if (remote || snapshot) {
                 const remoteTs = remote && remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
                 const snapshotTs = snapshot && snapshot.updatedAt ? new Date(snapshot.updatedAt).getTime() : 0;
-                applyPayload(remoteTs >= snapshotTs ? remote : snapshot);
+                const payload = remoteTs >= snapshotTs ? remote : snapshot;
+                applyPayload(payload);
                 if (shareId) copyLinkBtn.style.display = '';
                 if (shareId && !isOwner(shareId)) {
+                    Share.markTournamentAsViewed(shareId, { name: payload.name || '羽毛球比赛分组' });
                     saveBtn.textContent = '☁ 另存为云端并复制链接';
+                } else if (shareId) {
+                    Share.touchTournamentRecord(shareId);
                 }
                 return;
             }

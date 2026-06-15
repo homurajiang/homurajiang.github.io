@@ -14,7 +14,9 @@
   const KEY_PREFIX = 'bad_match/';
   const TOURNAMENT_KEY_PREFIX = 'badminton_tournament/';
   const MY_MATCHES_KEY = 'badminton_my_matches';
+  const MY_TOURNAMENTS_KEY = 'badminton_my_tournaments';
   const LEGACY_OWNER_KEY = 'badminton_owned_share_ids';
+  const LEGACY_TOURNAMENT_OWNER_KEY = 'badminton_tournament_owned_ids';
   const MAX_RECORDS = 50;
   const SCHEMA_VERSION = 1;
 
@@ -33,37 +35,57 @@
     }
   }
 
-  let _migrated = false;
-  function getMyMatches() {
-    const map = readMap(MY_MATCHES_KEY);
-    if (!_migrated) {
-      _migrated = true;
-      const legacy = readMap(LEGACY_OWNER_KEY);
-      let changed = false;
-      for (const id of Object.keys(legacy)) {
-        if (!map[id]) {
-          const createdAt = (legacy[id] && legacy[id].createdAt) || Date.now();
-          map[id] = { role: 'owner', addedAt: createdAt, lastSeenAt: Date.now() };
-          changed = true;
-        }
-      }
-      if (changed) saveMyMatches(map);
+  function trimRecordMap(map) {
+    const entries = Object.entries(map);
+    if (entries.length > MAX_RECORDS) {
+      entries.sort((a, b) => (b[1].lastSeenAt || 0) - (a[1].lastSeenAt || 0));
+      return Object.fromEntries(entries.slice(0, MAX_RECORDS));
     }
     return map;
   }
 
-  function saveMyMatches(map) {
-    const entries = Object.entries(map);
-    if (entries.length > MAX_RECORDS) {
-      entries.sort((a, b) => (b[1].lastSeenAt || 0) - (a[1].lastSeenAt || 0));
-      map = Object.fromEntries(entries.slice(0, MAX_RECORDS));
-    }
-    localStorage.setItem(MY_MATCHES_KEY, JSON.stringify(map));
+  function saveRecordMap(key, map) {
+    localStorage.setItem(key, JSON.stringify(trimRecordMap(map)));
   }
 
-  function addOrUpdateRecord(id, role, meta) {
+  function migrateLegacyOwners(map, key, legacyKey, state) {
+    if (state.done) return map;
+    state.done = true;
+    const legacy = readMap(legacyKey);
+    let changed = false;
+    for (const id of Object.keys(legacy)) {
+      if (!map[id]) {
+        const createdAt = (legacy[id] && legacy[id].createdAt) || Date.now();
+        map[id] = { role: 'owner', addedAt: createdAt, lastSeenAt: Date.now() };
+        changed = true;
+      }
+    }
+    if (changed) saveRecordMap(key, map);
+    return map;
+  }
+
+  const matchMigrationState = { done: false };
+  const tournamentMigrationState = { done: false };
+
+  function getMyMatches() {
+    return migrateLegacyOwners(readMap(MY_MATCHES_KEY), MY_MATCHES_KEY, LEGACY_OWNER_KEY, matchMigrationState);
+  }
+
+  function saveMyMatches(map) {
+    saveRecordMap(MY_MATCHES_KEY, map);
+  }
+
+  function getMyTournaments() {
+    return migrateLegacyOwners(readMap(MY_TOURNAMENTS_KEY), MY_TOURNAMENTS_KEY, LEGACY_TOURNAMENT_OWNER_KEY, tournamentMigrationState);
+  }
+
+  function saveMyTournaments(map) {
+    saveRecordMap(MY_TOURNAMENTS_KEY, map);
+  }
+
+  function addOrUpdateRecordIn(mapGetter, mapSaver, id, role, meta) {
     if (!id) return;
-    const map = getMyMatches();
+    const map = mapGetter();
     const now = Date.now();
     const existing = map[id];
     let finalRole = role;
@@ -77,7 +99,11 @@
       lastSeenAt: now,
       ...(meta || {}),
     };
-    saveMyMatches(map);
+    mapSaver(map);
+  }
+
+  function addOrUpdateRecord(id, role, meta) {
+    addOrUpdateRecordIn(getMyMatches, saveMyMatches, id, role, meta);
   }
 
   function markAsOwner(id, meta) {
@@ -106,6 +132,32 @@
     }
   }
 
+  function markTournamentAsOwner(id, meta) {
+    addOrUpdateRecordIn(getMyTournaments, saveMyTournaments, id, 'owner', meta);
+  }
+
+  function markTournamentAsViewed(id, meta) {
+    addOrUpdateRecordIn(getMyTournaments, saveMyTournaments, id, 'viewer', meta);
+  }
+
+  function touchTournamentRecord(id) {
+    if (!id) return;
+    const map = getMyTournaments();
+    if (map[id]) {
+      map[id].lastSeenAt = Date.now();
+      saveMyTournaments(map);
+    }
+  }
+
+  function removeTournamentRecord(id) {
+    if (!id) return;
+    const map = getMyTournaments();
+    if (id in map) {
+      delete map[id];
+      saveMyTournaments(map);
+    }
+  }
+
   function getRole(id) {
     if (!id) return null;
     const map = getMyMatches();
@@ -120,8 +172,28 @@
     return !!getRole(id);
   }
 
+  function getTournamentRole(id) {
+    if (!id) return null;
+    const map = getMyTournaments();
+    return (map[id] && map[id].role) || null;
+  }
+
+  function isTournamentOwner(id) {
+    return getTournamentRole(id) === 'owner';
+  }
+
   function countByRole() {
     const map = getMyMatches();
+    let owner = 0, viewer = 0;
+    for (const id of Object.keys(map)) {
+      if (map[id].role === 'owner') owner++;
+      else if (map[id].role === 'viewer') viewer++;
+    }
+    return { owner, viewer, total: owner + viewer };
+  }
+
+  function countTournamentsByRole() {
+    const map = getMyTournaments();
     let owner = 0, viewer = 0;
     for (const id of Object.keys(map)) {
       if (map[id].role === 'owner') owner++;
@@ -294,6 +366,21 @@
     }));
   }
 
+  async function listAllTournamentRecords() {
+    const map = getMyTournaments();
+    const ids = Object.keys(map);
+    if (ids.length === 0) return [];
+    const results = await Promise.allSettled(ids.map(id => fetchFromKV(id, { keyPrefix: TOURNAMENT_KEY_PREFIX })));
+    return ids.map((id, i) => ({
+      id,
+      role: map[id].role,
+      addedAt: map[id].addedAt,
+      lastSeenAt: map[id].lastSeenAt,
+      data: results[i].status === 'fulfilled' ? results[i].value : null,
+      error: results[i].status === 'rejected' ? results[i].reason : null,
+    }));
+  }
+
   // 向后兼容（如果有地方还在用）
   const listOwnedRecords = listAllRecords;
 
@@ -435,6 +522,16 @@
     isInMyMatches,
     countByRole,
     countOwned,         // 兼容旧调用
+    // 本地"我的分组"
+    getMyTournaments,
+    markTournamentAsOwner,
+    markTournamentAsViewed,
+    touchTournamentRecord,
+    removeTournamentRecord,
+    getTournamentRole,
+    isTournamentOwner,
+    countTournamentsByRole,
+    listAllTournamentRecords,
     // KV
     uploadToKV,
     uploadToKVWithRetry,

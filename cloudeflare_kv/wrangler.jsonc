@@ -1,0 +1,11 @@
+{
+  "name": "github-kv-api",
+  "compatibility_date": "2026-06-15",
+  "main": "worker.js",
+  "kv_namespaces": [
+    {
+      "binding": "STORAGE",
+      "id": "f5b6cd0eb43846768fcc1c33004e844a"
+    }
+  ]
+}

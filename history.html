@@ -106,6 +106,35 @@
         }
         .search-bar input:focus { border-color: var(--primary-light); }
 
+        .tabs {
+            display: flex;
+            gap: .5rem;
+            margin-bottom: 1rem;
+            background: rgba(255,255,255,.75);
+            border: 1px solid rgba(255,255,255,.6);
+            border-radius: var(--radius);
+            padding: .4rem;
+            box-shadow: var(--shadow);
+        }
+        .tab-btn {
+            flex: 1;
+            border: none;
+            background: transparent;
+            border-radius: var(--radius-sm);
+            padding: .6rem .8rem;
+            color: var(--gray-500);
+            cursor: pointer;
+            font-size: .88rem;
+            font-weight: 650;
+            transition: all var(--transition);
+        }
+        .tab-btn:hover { background: var(--gray-100); color: var(--gray-700); }
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(99,102,241,.25);
+        }
+
         .list { display: flex; flex-direction: column; gap: .75rem; }
 
         .record-card {
@@ -253,6 +282,7 @@
 
         @media (max-width: 640px) {
             body { padding: 1rem .5rem; }
+            .tabs { flex-direction: column; }
             .record-card { flex-direction: column; align-items: stretch; gap: .6rem; }
             .record-actions { justify-content: flex-end; }
         }
@@ -267,8 +297,13 @@
         </div>
 
         <div class="header">
-            <h1>比赛历史</h1>
+            <h1>历史记录</h1>
             <p id="subtitle">正在加载…</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-type="match">对局历史</button>
+            <button class="tab-btn" data-type="tournament">分组历史</button>
         </div>
 
         <div class="search-bar" id="search-bar" style="display:none;">
@@ -292,8 +327,10 @@
         const subtitle = document.getElementById('subtitle');
         const searchBar = document.getElementById('search-bar');
         const searchInput = document.getElementById('search-input');
+        const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
 
-        let allRecords = []; // [{id, data, error}]
+        let activeType = 'match'; // 'match' | 'tournament'
+        let allRecords = []; // [{id, role, data, error}]
 
         function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
@@ -326,8 +363,22 @@
             return '随机双打';
         }
 
+        function typeLabel() {
+            return activeType === 'tournament' ? '分组' : '对局';
+        }
+
         function renderEmpty() {
             searchBar.style.display = 'none';
+            if (activeType === 'tournament') {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <div class="emoji">📭</div>
+                        <div class="title">还没有分组记录</div>
+                        <div class="desc">在比赛分组页点击"保存到云端并复制链接"即可创建一条；打开别人分享的分组链接也会自动出现在这里。</div>
+                        <a href="tournament.html" class="btn btn-primary">🏆 创建比赛分组</a>
+                    </div>`;
+                return;
+            }
             content.innerHTML = `
                 <div class="empty-state">
                     <div class="emoji">📭</div>
@@ -370,21 +421,34 @@
                 }
                 const title = d.name || `未命名比赛`;
                 const time = formatDateTime(d.updatedAt);
-                const numPlayers = (d.players || []).length;
+                const numPlayers = activeType === 'tournament'
+                    ? ((d.teams || []).length * 2)
+                    : (d.players || []).length;
                 const numMatches = (d.matches || []).length;
                 const mode = (d.params && d.params.mode) || 'random_doubles';
+                const metrics = d.metrics || {};
+                const typeTag = activeType === 'tournament' ? '比赛分组' : modeLabel(mode);
+                const metaHtml = activeType === 'tournament'
+                    ? `
+                            <span>${time}</span>
+                            <span>${(d.teams || []).length} 支队伍</span>
+                            <span>A ${metrics.totalA || '—'} / B ${metrics.totalB || '—'}</span>
+                        `
+                    : `
+                            <span>${time}</span>
+                            <span>${numPlayers} 位选手</span>
+                            <span>${numMatches} 场对局</span>
+                        `;
                 return `
                 <div class="record-card" data-id="${r.id}">
                     <div class="record-main">
                         <div class="record-title">
                             <span>${escapeHtml(title)}</span>
                             ${roleTagHtml(r.role)}
-                            <span class="mode-tag">${modeLabel(mode)}</span>
+                            <span class="mode-tag">${typeTag}</span>
                         </div>
                         <div class="record-meta">
-                            <span>${time}</span>
-                            <span>${numPlayers} 位选手</span>
-                            <span>${numMatches} 场对局</span>
+                            ${metaHtml}
                         </div>
                     </div>
                     <div class="record-actions">
@@ -406,7 +470,10 @@
             const filtered = allRecords.filter(r => {
                 const d = r.data;
                 if (!d) return r.id.toLowerCase().includes(q);
-                const text = [d.name || '', modeLabel((d.params || {}).mode), formatDateTime(d.updatedAt)].join(' ').toLowerCase();
+                const extra = activeType === 'tournament'
+                    ? ['比赛分组', `A ${((d.metrics || {}).totalA) || ''}`, `B ${((d.metrics || {}).totalB) || ''}`].join(' ')
+                    : modeLabel((d.params || {}).mode);
+                const text = [d.name || '', extra, formatDateTime(d.updatedAt)].join(' ').toLowerCase();
                 return text.includes(q);
             });
             renderList(filtered);
@@ -439,8 +506,9 @@
             const rec = allRecords.find(x => x.id === id);
             const title = (rec && rec.data && rec.data.name) || `ID ${id}`;
             const isOwner = rec && rec.role === 'owner';
+            const currentTypeLabel = typeLabel();
             const ok = await confirmDelete({
-                title: isOwner ? '删除这场对局？' : '从列表移除？',
+                title: isOwner ? `删除这条${currentTypeLabel}记录？` : '从列表移除？',
                 message: isOwner
                     ? `"${escapeHtml(title)}" 将从云端和本地一并删除，所有查看者将再也打不开这个链接，且不可恢复。`
                     : `"${escapeHtml(title)}" 将从你的本地列表移除。这是别人创建的记录，本地移除不会影响别人，你重新打开分享链接时还会再次出现。`,
@@ -449,13 +517,14 @@
             if (!ok) return;
             if (isOwner) {
                 try {
-                    await Share.deleteFromKV(id);
+                    await Share.deleteFromKV(id, activeType === 'tournament' ? { keyPrefix: Share.TOURNAMENT_KEY_PREFIX } : undefined);
                 } catch (err) {
                     console.warn('KV 删除失败（容忍，仅移除本地）', err);
                     showToast('云端删除失败，已仅从本地列表移除', 'info');
                 }
             }
-            Share.removeRecord(id);
+            if (activeType === 'tournament') Share.removeTournamentRecord(id);
+            else Share.removeRecord(id);
             allRecords = allRecords.filter(x => x.id !== id);
             updateSubtitle();
             if (allRecords.length === 0) renderEmpty();
@@ -469,13 +538,25 @@
                 showToast('无法生成分享链接：记录不可用', 'error');
                 return;
             }
-            // 临时切换 location.pathname 语境来构造 result.html 的 URL
-            const url = location.origin + location.pathname.replace(/history\.html$/, 'result.html') + '#id=' + encodeURIComponent(id) + '&d=' + Share.compressData({
-                matches: rec.data.matches || [],
-                players: rec.data.players || [],
-                params: rec.data.params || null,
-                name: rec.data.name || '',
-            });
+            const targetPage = activeType === 'tournament' ? 'tournament.html' : 'result.html';
+            const snapshot = activeType === 'tournament'
+                ? {
+                    type: rec.data.type || 'tournament_grouping',
+                    name: rec.data.name || '',
+                    candidateCount: rec.data.candidateCount || 500,
+                    teams: rec.data.teams || [],
+                    groups: rec.data.groups || null,
+                    metrics: rec.data.metrics || null,
+                    generatedAt: rec.data.generatedAt || null,
+                    rulesVersion: rec.data.rulesVersion || 1,
+                }
+                : {
+                    matches: rec.data.matches || [],
+                    players: rec.data.players || [],
+                    params: rec.data.params || null,
+                    name: rec.data.name || '',
+                };
+            const url = location.origin + location.pathname.replace(/history\.html$/, targetPage) + '#id=' + encodeURIComponent(id) + '&d=' + Share.compressData(snapshot);
             try {
                 await navigator.clipboard.writeText(url);
                 showToast('分享链接已复制到剪贴板', 'success');
@@ -496,46 +577,63 @@
             const viewer = allRecords.filter(r => r.role === 'viewer').length;
             const errorCount = allRecords.filter(r => !r.data).length;
             if (n === 0) {
-                subtitle.textContent = '暂无记录';
+                subtitle.textContent = `暂无${typeLabel()}记录`;
                 return;
             }
-            let base = `共 ${n} 场 · 我创建 ${owner} · 访问过 ${viewer}`;
+            let base = `共 ${n} 条${typeLabel()}记录 · 我创建 ${owner} · 访问过 ${viewer}`;
             if (errorCount > 0) base += ` · ${errorCount} 条云端不可用`;
             subtitle.textContent = base;
         }
 
         // ── 初始加载 ────────────────────────────────────────────────
-        const counts = Share.countByRole();
-        if (counts.total === 0) {
-            subtitle.textContent = '暂无记录';
-            renderEmpty();
-            return;
+        function setActiveTab(type) {
+            activeType = type;
+            tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.type === type));
+            searchInput.value = '';
         }
 
-        let records;
-        try {
-            records = await Share.listAllRecords();
-        } catch (err) {
-            console.error(err);
-            content.innerHTML = `<div class="empty-state"><div class="emoji">⚠️</div><div class="title">加载失败</div><div class="desc">${escapeHtml(err.message || String(err))}</div></div>`;
-            return;
-        }
-        // 按更新时间降序
-        records.sort((a, b) => {
-            const ta = a.data && a.data.updatedAt ? new Date(a.data.updatedAt).getTime() : 0;
-            const tb = b.data && b.data.updatedAt ? new Date(b.data.updatedAt).getTime() : 0;
-            return tb - ta;
-        });
-        allRecords = records;
-        updateSubtitle();
+        async function loadRecords(type) {
+            setActiveTab(type);
+            content.innerHTML = `
+                <div class="loading-state">
+                    <div class="spinner-lg"></div>
+                    <div style="margin-top: 1rem;">正在从云端加载${typeLabel()}记录…</div>
+                </div>`;
+            searchBar.style.display = 'none';
 
-        if (records.length === 0) {
-            renderEmpty();
-            return;
-        }
+            const counts = activeType === 'tournament' ? Share.countTournamentsByRole() : Share.countByRole();
+            if (counts.total === 0) {
+                allRecords = [];
+                updateSubtitle();
+                renderEmpty();
+                return;
+            }
 
-        searchBar.style.display = '';
-        renderList(records);
+            let records;
+            try {
+                records = activeType === 'tournament' ? await Share.listAllTournamentRecords() : await Share.listAllRecords();
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `<div class="empty-state"><div class="emoji">⚠️</div><div class="title">加载失败</div><div class="desc">${escapeHtml(err.message || String(err))}</div></div>`;
+                return;
+            }
+
+            records.sort((a, b) => {
+                const ta = a.data && a.data.updatedAt ? new Date(a.data.updatedAt).getTime() : 0;
+                const tb = b.data && b.data.updatedAt ? new Date(b.data.updatedAt).getTime() : 0;
+                return tb - ta;
+            });
+            allRecords = records;
+            updateSubtitle();
+
+            if (records.length === 0) {
+                renderEmpty();
+                return;
+            }
+
+            searchBar.style.display = '';
+            renderList(records);
+        }
 
         // 事件委托
         content.addEventListener('click', (e) => {
@@ -552,11 +650,19 @@
             const card = e.target.closest('.record-card');
             if (card && !card.classList.contains('stale')) {
                 const id = card.dataset.id;
-                location.href = `result.html#id=${encodeURIComponent(id)}`;
+                const targetPage = activeType === 'tournament' ? 'tournament.html' : 'result.html';
+                location.href = `${targetPage}#id=${encodeURIComponent(id)}`;
             }
         });
 
         searchInput.addEventListener('input', applyFilter);
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.type !== activeType) loadRecords(btn.dataset.type);
+            });
+        });
+
+        await loadRecords('match');
     })();
     </script>
 </body>
