@@ -417,7 +417,7 @@
         .modal h3 { font-size: 1.05rem; color: var(--gray-800); margin-bottom: .5rem; }
         .modal p { color: var(--gray-500); font-size: .86rem; line-height: 1.5; margin-bottom: .8rem; }
         .share-row { display: flex; gap: .5rem; }
-        .share-row input { flex: 1; }
+        .share-row input { flex: 1; min-width: 0; }
         .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
 
         @media (max-width: 960px) {
@@ -433,6 +433,40 @@
             .player-fields { grid-template-columns: minmax(0, 1fr) 72px auto; }
             .group-grid, .summary-grid, .bracket { grid-template-columns: 1fr; }
             .field-row, .share-row { flex-direction: column; }
+            .share-row .btn { width: 100%; }
+            .toast-container {
+                top: .75rem;
+                right: .75rem;
+                left: .75rem;
+            }
+            .toast { width: 100%; }
+            .modal-backdrop {
+                align-items: flex-start;
+                padding: .75rem;
+                overflow-y: auto;
+            }
+            .modal {
+                width: 100%;
+                max-height: calc(100vh - 1.5rem);
+                overflow-y: auto;
+                padding: 1rem;
+            }
+        }
+        @media (max-width: 480px) {
+            .player-fields {
+                grid-template-columns: minmax(0, 1fr) 72px;
+            }
+            .gender-toggle {
+                grid-column: 1 / -1;
+                width: 100%;
+            }
+            .gender-toggle label {
+                flex: 1;
+                text-align: center;
+            }
+            .actions .btn {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -819,6 +853,30 @@
             };
         }
 
+        function normalizeTeamsFromPayload(payload) {
+            const teams = Array.isArray(payload.teams) ? payload.teams : [];
+            if (teams.length === TEAM_COUNT && teams.every(team => Array.isArray(team.players) && team.players.length >= 2)) {
+                return teams;
+            }
+
+            const groupedTeams = [
+                ...(((payload.groups || {}).A) || []),
+                ...(((payload.groups || {}).B) || []),
+            ];
+            if (groupedTeams.length === TEAM_COUNT && groupedTeams.every(team => Array.isArray(team.players) && team.players.length >= 2)) {
+                return groupedTeams.map((team, index) => ({
+                    id: team.id || `team-${index + 1}`,
+                    players: team.players.slice(0, 2).map(player => ({
+                        name: player.name || '',
+                        level: player.level ?? '',
+                        gender: player.gender || 'M',
+                    })),
+                }));
+            }
+
+            return defaultTeams();
+        }
+
         function persistDraft() {
             try {
                 localStorage.setItem(DRAFT_KEY, JSON.stringify(currentPayload()));
@@ -829,7 +887,7 @@
             if (!payload) return;
             nameInput.value = payload.name || '';
             candidateInput.value = payload.candidateCount || 500;
-            renderTeamInputs((payload.teams && payload.teams.length === TEAM_COUNT) ? payload.teams : defaultTeams());
+            renderTeamInputs(normalizeTeamsFromPayload(payload));
             groups = payload.groups || null;
             metrics = payload.metrics || null;
             generatedAt = payload.generatedAt || null;
