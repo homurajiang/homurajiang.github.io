@@ -571,12 +571,14 @@
 
     <script src="js/lz-string.min.js"></script>
     <script src="js/share.js"></script>
+    <script src="js/tournament-core.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', async () => {
         const TEAM_COUNT = 12;
         const OWNER_KEY = 'badminton_tournament_owned_ids';
         const DRAFT_KEY = 'badminton_tournament_draft';
         const Share = window.BadmintonShare;
+        const Core = window.TournamentCore;
         const keyPrefix = Share.TOURNAMENT_KEY_PREFIX;
 
         const teamsTable = document.getElementById('teams-table');
@@ -595,6 +597,9 @@
         let metrics = null;
         let generatedAt = null;
         let latestRemoteUpdatedAt = null;
+        let groupMatches = { A: [], B: [] };
+        let rankingLocks = { A: null, B: null };
+        let knockout = null;
 
         function escapeHtml(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -849,7 +854,10 @@
                 groups,
                 metrics,
                 generatedAt,
-                rulesVersion: 1,
+                groupMatches,
+                rankingLocks,
+                knockout,
+                rulesVersion: 2,
             };
         }
 
@@ -885,13 +893,17 @@
 
         function applyPayload(payload) {
             if (!payload) return;
-            nameInput.value = payload.name || '';
-            candidateInput.value = payload.candidateCount || 500;
-            renderTeamInputs(normalizeTeamsFromPayload(payload));
-            groups = payload.groups || null;
-            metrics = payload.metrics || null;
-            generatedAt = payload.generatedAt || null;
-            latestRemoteUpdatedAt = payload.updatedAt || null;
+            const normalized = Core.ensureTournamentState(payload);
+            nameInput.value = normalized.name || '';
+            candidateInput.value = normalized.candidateCount || 500;
+            renderTeamInputs(normalizeTeamsFromPayload(normalized));
+            groups = normalized.groups || null;
+            metrics = normalized.metrics || null;
+            generatedAt = normalized.generatedAt || null;
+            groupMatches = normalized.groupMatches || { A: [], B: [] };
+            rankingLocks = normalized.rankingLocks || { A: null, B: null };
+            knockout = normalized.knockout || null;
+            latestRemoteUpdatedAt = normalized.updatedAt || null;
             renderResult();
         }
 
@@ -904,6 +916,9 @@
             showError([]);
             const result = generateBalancedGroups(teams, candidateInput.value);
             groups = { A: result.A, B: result.B };
+            groupMatches = Core.generateGroupMatches(groups);
+            rankingLocks = { A: null, B: null };
+            knockout = null;
             metrics = result.metrics;
             generatedAt = new Date().toISOString();
             renderResult();
@@ -1054,6 +1069,9 @@
             metrics = null;
             generatedAt = null;
             latestRemoteUpdatedAt = null;
+            groupMatches = { A: [], B: [] };
+            rankingLocks = { A: null, B: null };
+            knockout = null;
             nameInput.value = '';
             candidateInput.value = 500;
             renderTeamInputs(defaultTeams());
