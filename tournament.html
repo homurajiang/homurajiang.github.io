@@ -397,6 +397,41 @@
             color: var(--gray-700);
             font-weight: 600;
         }
+        .stage-section { margin-top: 1rem; border-top: 1px solid var(--gray-100); padding-top: 1rem; }
+        .stage-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .75rem; flex-wrap: wrap; }
+        .stage-title { font-weight: 800; color: var(--gray-900); }
+        .stage-meta { color: var(--gray-500); font-size: .86rem; }
+        .schedule-list { display: flex; flex-direction: column; gap: .55rem; }
+        .schedule-match {
+            border: 1px solid var(--gray-100);
+            border-radius: var(--radius-sm);
+            padding: .65rem;
+            background: #fff;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: .65rem;
+            align-items: center;
+        }
+        .schedule-match.locked { background: var(--gray-50); }
+        .match-title { font-weight: 750; color: var(--gray-900); line-height: 1.4; }
+        .match-subtitle { margin-top: .18rem; color: var(--gray-500); font-size: .82rem; line-height: 1.4; }
+        .score-editor { display: flex; align-items: center; gap: .35rem; }
+        .score-editor input {
+            width: 3.8rem;
+            padding: .45rem .35rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            text-align: center;
+            font-weight: 800;
+        }
+        .score-editor .sep { color: var(--gray-400); font-weight: 800; }
+        .score-error { grid-column: 1 / -1; color: var(--danger); font-size: .82rem; }
+        .standings-table { width: 100%; border-collapse: collapse; margin-top: .75rem; font-size: .88rem; }
+        .standings-table th, .standings-table td { border-bottom: 1px solid var(--gray-100); padding: .48rem .35rem; text-align: left; }
+        .standings-table th { color: var(--gray-500); font-weight: 800; background: var(--gray-50); }
+        .standings-table .rank-cell { font-weight: 900; color: var(--primary); }
+        .standings-table .manual-flag { color: var(--danger); font-size: .78rem; margin-top: .15rem; }
+        .lock-banner { margin-top: .75rem; padding: .65rem .75rem; border-radius: var(--radius-sm); background: #ecfdf5; color: #047857; font-weight: 700; line-height: 1.5; }
         .modal-backdrop {
             position: fixed;
             inset: 0;
@@ -432,6 +467,8 @@
             .team-index { text-align: left; }
             .player-fields { grid-template-columns: minmax(0, 1fr) 72px auto; }
             .group-grid, .summary-grid, .bracket { grid-template-columns: 1fr; }
+            .schedule-match { grid-template-columns: 1fr; }
+            .score-editor { justify-content: flex-start; }
             .field-row, .share-row { flex-direction: column; }
             .share-row .btn { width: 100%; }
             .toast-container {
@@ -796,6 +833,35 @@
             return team.players.map(p => `${p.name}(${p.level}${p.gender === 'F' ? ' 女' : ' 男'})`).join(' / ');
         }
 
+        function teamById(id) {
+            const all = [...((groups || {}).A || []), ...((groups || {}).B || [])];
+            return all.find(team => team.id === id) || null;
+        }
+
+        function shortTeamName(team) {
+            if (!team || !Array.isArray(team.players)) return '待定';
+            return team.players.map(player => player.name).join(' / ');
+        }
+
+        function handicapText(team1, team2) {
+            if (!team1 || !team2) return '';
+            const diff = (team1.femaleCount || 0) - (team2.femaleCount || 0);
+            if (diff === 0) return '无让分';
+            if (diff > 0) return `${shortTeamName(team1)} 开局 +${diff * 4}`;
+            return `${shortTeamName(team2)} 开局 +${Math.abs(diff) * 4}`;
+        }
+
+        function renderScoreInputs(match, disabled) {
+            const score = match.score || {};
+            return `
+                <div class="score-editor">
+                    <input type="number" min="0" max="30" data-score-side="team1" value="${score.team1 ?? ''}" ${disabled ? 'disabled' : ''}>
+                    <span class="sep">:</span>
+                    <input type="number" min="0" max="30" data-score-side="team2" value="${score.team2 ?? ''}" ${disabled ? 'disabled' : ''}>
+                </div>
+            `;
+        }
+
         function renderGroup(name, list) {
             const total = sumLevels(list);
             return `
@@ -810,7 +876,73 @@
                             <div class="players">${escapeHtml(teamLabel(team))} · 女生 ${team.femaleCount} 人</div>
                         </div>
                     `).join('')}
+                    ${groupMatches && groupMatches[name] && groupMatches[name].length ? renderGroupStage(name) : ''}
                 </div>`;
+        }
+
+        function renderGroupStage(groupName) {
+            const matches = (groupMatches || {})[groupName] || [];
+            const standings = Core.computeStandings(groupName, groups[groupName] || [], matches);
+            const completion = matches.filter(match => Core.validateSingleScore(match.score).valid).length;
+            const lock = rankingLocks[groupName];
+            const confirmState = Core.canConfirmGroup(standings, matches);
+            return `
+                <div class="stage-section" data-group-stage="${groupName}">
+                    <div class="stage-header">
+                        <div>
+                            <div class="stage-title">${groupName} 组小组赛</div>
+                            <div class="stage-meta">${completion} / ${matches.length} 场已完成</div>
+                        </div>
+                        ${lock
+                            ? `<button class="btn btn-secondary unlock-ranking-btn" data-group="${groupName}">解锁排名</button>`
+                            : `<button class="btn btn-primary confirm-ranking-btn" data-group="${groupName}" ${confirmState.ok ? '' : 'disabled'}>确认排名</button>`}
+                    </div>
+                    <div class="schedule-list">
+                        ${matches.map(match => {
+                            const team1 = teamById(match.team1Id);
+                            const team2 = teamById(match.team2Id);
+                            const validation = match.score ? Core.validateSingleScore(match.score) : { valid: true, message: '' };
+                            return `
+                                <div class="schedule-match ${lock ? 'locked' : ''}" data-group="${groupName}" data-match-id="${match.id}">
+                                    <div>
+                                        <div class="match-title">${escapeHtml(shortTeamName(team1))} vs ${escapeHtml(shortTeamName(team2))}</div>
+                                        <div class="match-subtitle">${escapeHtml(handicapText(team1, team2))}</div>
+                                    </div>
+                                    ${renderScoreInputs(match, !!lock)}
+                                    ${validation.valid ? '' : `<div class="score-error">${escapeHtml(validation.message)}</div>`}
+                                </div>`;
+                        }).join('')}
+                    </div>
+                    ${renderStandings(groupName, standings)}
+                    ${lock ? `<div class="lock-banner">${groupName} 组排名已确认：${lock.seeds.map(seed => `${seed.seed} ${escapeHtml(shortTeamName(teamById(seed.teamId)))}`).join('，')}</div>` : ''}
+                    ${!lock && !confirmState.ok ? `<div class="hint" style="margin-top:.65rem;">${escapeHtml(confirmState.message)}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function renderStandings(groupName, standings) {
+            return `
+                <table class="standings-table">
+                    <thead>
+                        <tr><th colspan="8">${groupName} 组排名 · ${Core.RANKING_RULE_LABEL}</th></tr>
+                        <tr><th>#</th><th>队伍</th><th>场</th><th>胜</th><th>负</th><th>得分</th><th>失分</th><th>净胜分</th></tr>
+                    </thead>
+                    <tbody>
+                        ${standings.map(row => `
+                            <tr>
+                                <td class="rank-cell">${row.rank}</td>
+                                <td>${escapeHtml(shortTeamName(row.team))}${row.needsManualDecision ? '<div class="manual-flag">需手动裁定</div>' : ''}</td>
+                                <td>${row.played}</td>
+                                <td>${row.wins}</td>
+                                <td>${row.losses}</td>
+                                <td>${row.pointsFor}</td>
+                                <td>${row.pointsAgainst}</td>
+                                <td>${row.pointDiff}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
         }
 
         function renderResult() {
@@ -1060,6 +1192,58 @@
             persistDraft();
         });
         teamsTable.addEventListener('change', persistDraft);
+        resultPanel.addEventListener('change', (event) => {
+            const input = event.target.closest('input[data-score-side]');
+            if (!input) return;
+            const card = input.closest('.schedule-match');
+            if (!card) return;
+            const groupName = card.dataset.group;
+            const matchId = card.dataset.matchId;
+            if (rankingLocks[groupName]) return;
+            const match = (groupMatches[groupName] || []).find(item => item.id === matchId);
+            if (!match) return;
+            const team1Raw = card.querySelector('input[data-score-side="team1"]').value;
+            const team2Raw = card.querySelector('input[data-score-side="team2"]').value;
+            match.score = team1Raw === '' && team2Raw === '' ? null : {
+                team1: Number(team1Raw),
+                team2: Number(team2Raw),
+            };
+            knockout = null;
+            persistDraft();
+            renderResult();
+        });
+
+        resultPanel.addEventListener('click', (event) => {
+            const confirmBtn = event.target.closest('.confirm-ranking-btn');
+            if (confirmBtn) {
+                const groupName = confirmBtn.dataset.group;
+                const standings = Core.computeStandings(groupName, groups[groupName] || [], groupMatches[groupName] || []);
+                const state = Core.canConfirmGroup(standings, groupMatches[groupName] || []);
+                if (!state.ok) {
+                    showToast(state.message, 'error');
+                    return;
+                }
+                rankingLocks[groupName] = Core.createRankingLock(groupName, standings);
+                if (rankingLocks.A && rankingLocks.B) {
+                    knockout = Core.createKnockout(rankingLocks);
+                    showToast('淘汰赛已根据 A1-A4 / B1-B4 生成', 'success');
+                }
+                persistDraft();
+                renderResult();
+                return;
+            }
+
+            const unlockBtn = event.target.closest('.unlock-ranking-btn');
+            if (unlockBtn) {
+                const groupName = unlockBtn.dataset.group;
+                const ok = !knockout || window.confirm('解锁排名会重置已生成的淘汰赛和淘汰赛比分，确定继续吗？');
+                if (!ok) return;
+                rankingLocks[groupName] = null;
+                knockout = null;
+                persistDraft();
+                renderResult();
+            }
+        });
 
         generateBtn.addEventListener('click', generate);
         regenerateBtn.addEventListener('click', generate);
