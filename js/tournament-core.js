@@ -157,6 +157,180 @@
     return next;
   }
 
+  function seedMapFromLocks(rankingLocks) {
+    const map = {};
+    ['A', 'B'].forEach(groupName => {
+      (((rankingLocks || {})[groupName] || {}).seeds || []).forEach(seed => {
+        map[seed.seed] = seed.teamId;
+      });
+    });
+    return map;
+  }
+
+  function knockoutMatch(id, label, source1, source2, team1Id, team2Id, scoreMode) {
+    return {
+      id,
+      label,
+      source1,
+      source2,
+      team1Id: team1Id || null,
+      team2Id: team2Id || null,
+      scoreMode,
+      score: null,
+      games: null,
+      winnerId: null,
+      loserId: null,
+    };
+  }
+
+  function createKnockout(rankingLocks, now) {
+    const seeds = seedMapFromLocks(rankingLocks);
+    return {
+      generatedAt: now || new Date().toISOString(),
+      rounds: {
+        quarterfinals: [
+          knockoutMatch('QF1', '1/4 决赛 1', 'A1', 'B4', seeds.A1, seeds.B4, 'single'),
+          knockoutMatch('QF2', '1/4 决赛 2', 'A2', 'B3', seeds.A2, seeds.B3, 'single'),
+          knockoutMatch('QF3', '1/4 决赛 3', 'A3', 'B2', seeds.A3, seeds.B2, 'single'),
+          knockoutMatch('QF4', '1/4 决赛 4', 'A4', 'B1', seeds.A4, seeds.B1, 'single'),
+        ],
+        semifinals: [
+          knockoutMatch('SF1', '半决赛 1', 'QF1 胜者', 'QF2 胜者', null, null, 'single'),
+          knockoutMatch('SF2', '半决赛 2', 'QF3 胜者', 'QF4 胜者', null, null, 'single'),
+        ],
+        thirdPlace: [
+          knockoutMatch('TP', '季军赛', 'SF1 负者', 'SF2 负者', null, null, 'bestOfThree'),
+        ],
+        final: [
+          knockoutMatch('F', '决赛', 'SF1 胜者', 'SF2 胜者', null, null, 'bestOfThree'),
+        ],
+      },
+    };
+  }
+
+  function cloneKnockout(knockout) {
+    return JSON.parse(JSON.stringify(knockout));
+  }
+
+  function allKnockoutMatches(knockout) {
+    return [
+      ...(knockout.rounds.quarterfinals || []),
+      ...(knockout.rounds.semifinals || []),
+      ...(knockout.rounds.thirdPlace || []),
+      ...(knockout.rounds.final || []),
+    ];
+  }
+
+  function sideWinner(match, side) {
+    return side === 'team1' ? match.team1Id : match.team2Id;
+  }
+
+  function sideLoser(match, side) {
+    return side === 'team1' ? match.team2Id : match.team1Id;
+  }
+
+  function evaluateSingleMatch(match) {
+    if (!match.team1Id || !match.team2Id || !validateSingleScore(match.score).valid) {
+      return { winnerId: null, loserId: null };
+    }
+    const team1Won = Number(match.score.team1) > Number(match.score.team2);
+    return {
+      winnerId: team1Won ? match.team1Id : match.team2Id,
+      loserId: team1Won ? match.team2Id : match.team1Id,
+    };
+  }
+
+  function validateBestOfThree(games) {
+    const list = (games || []).filter(game => game && (game.team1 !== '' || game.team2 !== ''));
+    if (list.length === 0) return { valid: false, complete: false, winnerSide: null, message: '请输入比分' };
+    let team1Wins = 0;
+    let team2Wins = 0;
+    for (const game of list.slice(0, 3)) {
+      const validation = validateSingleScore(game);
+      if (!validation.valid) return { valid: false, complete: false, winnerSide: null, message: validation.message };
+      if (Number(game.team1) > Number(game.team2)) team1Wins += 1;
+      else team2Wins += 1;
+      if (team1Wins === 2) return { valid: true, complete: true, winnerSide: 'team1', message: '' };
+      if (team2Wins === 2) return { valid: true, complete: true, winnerSide: 'team2', message: '' };
+    }
+    return { valid: true, complete: false, winnerSide: null, message: '' };
+  }
+
+  function evaluateBestOfThreeMatch(match) {
+    if (!match.team1Id || !match.team2Id) return { winnerId: null, loserId: null };
+    const validation = validateBestOfThree(match.games);
+    if (!validation.valid || !validation.complete) return { winnerId: null, loserId: null };
+    return {
+      winnerId: sideWinner(match, validation.winnerSide),
+      loserId: sideLoser(match, validation.winnerSide),
+    };
+  }
+
+  function resetMatchResult(match) {
+    match.score = null;
+    match.games = null;
+    match.winnerId = null;
+    match.loserId = null;
+  }
+
+  function assignAdvancedTeams(knockout) {
+    const qf = knockout.rounds.quarterfinals;
+    const sf = knockout.rounds.semifinals;
+    const third = knockout.rounds.thirdPlace[0];
+    const final = knockout.rounds.final[0];
+
+    sf[0].team1Id = qf[0].winnerId;
+    sf[0].team2Id = qf[1].winnerId;
+    sf[1].team1Id = qf[2].winnerId;
+    sf[1].team2Id = qf[3].winnerId;
+
+    final.team1Id = sf[0].winnerId;
+    final.team2Id = sf[1].winnerId;
+    third.team1Id = sf[0].loserId;
+    third.team2Id = sf[1].loserId;
+  }
+
+  function clearInvalidDownstreamResults(knockout) {
+    allKnockoutMatches(knockout).forEach(match => {
+      if ((match.score || match.games) && (!match.team1Id || !match.team2Id)) {
+        resetMatchResult(match);
+      }
+    });
+  }
+
+  function recalculateKnockout(knockout) {
+    allKnockoutMatches(knockout).forEach(match => {
+      const result = match.scoreMode === 'bestOfThree' ? evaluateBestOfThreeMatch(match) : evaluateSingleMatch(match);
+      match.winnerId = result.winnerId;
+      match.loserId = result.loserId;
+    });
+    assignAdvancedTeams(knockout);
+    clearInvalidDownstreamResults(knockout);
+    allKnockoutMatches(knockout).forEach(match => {
+      const result = match.scoreMode === 'bestOfThree' ? evaluateBestOfThreeMatch(match) : evaluateSingleMatch(match);
+      match.winnerId = result.winnerId;
+      match.loserId = result.loserId;
+    });
+    assignAdvancedTeams(knockout);
+    return knockout;
+  }
+
+  function updateKnockoutMatch(knockout, matchId, scoreData) {
+    const next = cloneKnockout(knockout);
+    const match = allKnockoutMatches(next).find(item => item.id === matchId);
+    if (!match) return next;
+    if (!scoreData) {
+      resetMatchResult(match);
+    } else if (match.scoreMode === 'bestOfThree') {
+      match.games = Array.isArray(scoreData.games) ? scoreData.games.slice(0, 3) : null;
+      match.score = null;
+    } else {
+      match.score = scoreData.score || null;
+      match.games = null;
+    }
+    return recalculateKnockout(next);
+  }
+
   return {
     RANKING_RULE_LABEL,
     generateGroupMatches,
@@ -165,5 +339,8 @@
     computeStandings,
     canConfirmGroup,
     createRankingLock,
+    createKnockout,
+    validateBestOfThree,
+    updateKnockoutMatch,
   };
 });

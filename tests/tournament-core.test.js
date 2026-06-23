@@ -109,3 +109,49 @@ test('confirms ranking only after all matches have valid scores', () => {
   assert.strictEqual(lock.confirmedAt, '2026-06-23T00:00:00.000Z');
   assert.deepStrictEqual(lock.seeds.map(seed => seed.seed), ['A1', 'A2', 'A3', 'A4']);
 });
+
+test('creates knockout bracket from locked A and B seeds', () => {
+  const locks = {
+    A: { confirmedAt: '2026-06-23T00:00:00.000Z', seeds: [
+      { seed: 'A1', teamId: 'a1' }, { seed: 'A2', teamId: 'a2' }, { seed: 'A3', teamId: 'a3' }, { seed: 'A4', teamId: 'a4' },
+    ] },
+    B: { confirmedAt: '2026-06-23T00:00:00.000Z', seeds: [
+      { seed: 'B1', teamId: 'b1' }, { seed: 'B2', teamId: 'b2' }, { seed: 'B3', teamId: 'b3' }, { seed: 'B4', teamId: 'b4' },
+    ] },
+  };
+  const knockout = TournamentCore.createKnockout(locks, '2026-06-23T01:00:00.000Z');
+  assert.strictEqual(knockout.generatedAt, '2026-06-23T01:00:00.000Z');
+  assert.deepStrictEqual(knockout.rounds.quarterfinals.map(match => [match.id, match.team1Id, match.team2Id]), [
+    ['QF1', 'a1', 'b4'],
+    ['QF2', 'a2', 'b3'],
+    ['QF3', 'a3', 'b2'],
+    ['QF4', 'a4', 'b1'],
+  ]);
+});
+
+test('advances knockout winners and semifinal losers', () => {
+  const locks = {
+    A: { confirmedAt: 'x', seeds: [{ seed: 'A1', teamId: 'a1' }, { seed: 'A2', teamId: 'a2' }, { seed: 'A3', teamId: 'a3' }, { seed: 'A4', teamId: 'a4' }] },
+    B: { confirmedAt: 'x', seeds: [{ seed: 'B1', teamId: 'b1' }, { seed: 'B2', teamId: 'b2' }, { seed: 'B3', teamId: 'b3' }, { seed: 'B4', teamId: 'b4' }] },
+  };
+  let knockout = TournamentCore.createKnockout(locks, 'x');
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'QF1', { score: { team1: 21, team2: 10 } });
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'QF2', { score: { team1: 21, team2: 11 } });
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'QF3', { score: { team1: 12, team2: 21 } });
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'QF4', { score: { team1: 15, team2: 21 } });
+  assert.deepStrictEqual(knockout.rounds.semifinals.map(match => [match.team1Id, match.team2Id]), [['a1', 'a2'], ['b2', 'b1']]);
+
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'SF1', { score: { team1: 21, team2: 19 } });
+  knockout = TournamentCore.updateKnockoutMatch(knockout, 'SF2', { score: { team1: 18, team2: 21 } });
+  assert.deepStrictEqual(knockout.rounds.final.map(match => [match.team1Id, match.team2Id]), [['a1', 'b1']]);
+  assert.deepStrictEqual(knockout.rounds.thirdPlace.map(match => [match.team1Id, match.team2Id]), [['a2', 'b2']]);
+});
+
+test('validates best-of-three final scoring', () => {
+  assert.deepStrictEqual(
+    TournamentCore.validateBestOfThree([{ team1: 21, team2: 18 }, { team1: 19, team2: 21 }, { team1: 21, team2: 19 }]),
+    { valid: true, complete: true, winnerSide: 'team1', message: '' }
+  );
+  assert.strictEqual(TournamentCore.validateBestOfThree([{ team1: 21, team2: 18 }]).complete, false);
+  assert.strictEqual(TournamentCore.validateBestOfThree([{ team1: 21, team2: 20 }, { team1: 21, team2: 18 }]).valid, false);
+});
